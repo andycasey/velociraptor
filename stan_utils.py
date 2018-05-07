@@ -4,8 +4,9 @@ import logging
 import pickle
 
 import pystan as stan
+import pystan.plots as plots
 
-__all__ = ["load_stan_model", "sampling_kwds"]
+__all__ = ["load_stan_model", "sampling_kwds", "plots"]
 
 
 def load_stan_model(path, cached_path=None, recompile=False, overwrite=True):

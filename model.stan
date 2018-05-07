@@ -1,24 +1,25 @@
 
 data  {
   int N; // number of sources
+  int M; // columns in the design matrix for the mu floor
+  int S; // columns in the design matrix for the scatter floor
   real rv_variance[N];
   real flux[N];
+  matrix[N, M] mu_design_matrix;
+  matrix[N, S] sigma_design_matrix;
 }
 
+// N, K,  and K
 transformed data {
-  real inverse_flux_sq[N]; 
-  for (n in 1:N)
-    inverse_flux_sq[n] = pow(flux[n], -2);
-
+  real max_rv_variance;
+  max_rv_variance = max(rv_variance);
 }
 
 parameters {
   real<lower=0, upper=1> outlier_fraction;
-  real<lower=0> c0; // coefficient in rv_var ~ f(flux)
-  real c1; // coefficient in rv_var ~ f(flux)
+  vector<lower=1e-3, upper=1e12>[M] mu_coefficients;
+  vector<lower=1e-3, upper=1e12>[S] sigma_coefficients;
 
-  real<lower=1e-3> s0; // coefficient for intrinsic scatter in RV floor
-  real<lower=0> s1;    // coefficient for intrinsic scatter in RV floor
 }
 
 transformed parameters {
@@ -26,16 +27,17 @@ transformed parameters {
   real<lower=0> rvf_mu[N];    // intrinsic mu for RV floor
   real<lower=0> rvf_sigma[N]; // intrinsic scatter for RV floor 
   for (n in 1:N) {
-    rvf_mu[n] = c0 + c1 * inverse_flux_sq[n];
-    rvf_sigma[n] = s0 + s1 * inverse_flux_sq[n];
+    rvf_mu[n] = dot_product(mu_design_matrix[n], mu_coefficients);
+    rvf_sigma[n] = dot_product(sigma_design_matrix[n], sigma_coefficients);
   }
 }
 
 model {
   outlier_fraction ~ beta(0.5, 0.5);
+
   for (n in 1:N) {
     target += log_mix(outlier_fraction,
-                      uniform_lpdf(rv_variance[n] | 0, 20),
+                      uniform_lpdf(rv_variance[n] | 0, 400),
                       normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]));
     }
 }
