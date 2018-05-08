@@ -537,10 +537,9 @@ H_bin, _, __ = np.histogram2d(
     bins=(xedges, yedges))
 
 H = H_bin/H_all
-#H[~np.isfinite(H)] = 0.0
-H[(H == 1) * (H_all < 2)] = np.nan
 
-image = axes[1].imshow(H.T, extent=(xedges[0], xedges[-1], yedges[-1], yedges[0]),
+image = axes[1].imshow(H.T, 
+    extent=(xedges[0], xedges[-1], yedges[-1], yedges[0]),
     aspect=np.ptp(xedges)/np.ptp(yedges), cmap="viridis")
 
 
@@ -560,3 +559,17 @@ axes[1].xaxis.set_major_locator(MaxNLocator(6))
 axes[1].yaxis.set_major_locator(MaxNLocator(6))
 
 _savefig(fig, "hrd-binary-fraction")
+
+
+# Nect steps:
+# [ ] decide what to plot as "residual"
+# [ ] plot "residual" vs other stellar parameters and decide if they need to be
+#     accounted for when fitting:
+#       [ ] absolute luminosity / stellar luminosity
+#       [ ] bp flux - rp flux
+#       [ ] which RV template was used
+#       [ ] RV template properties minus a guess at the stellar properties
+#       [ ] 
+    
+
+

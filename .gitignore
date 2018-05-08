@@ -1,0 +1,15 @@
+.gitignore
+.DS_Store
+__pycache__/
+
+data/*.fits*
+figures/*.pdf
+
+*.stan.cached
+
+article/vc.tex
+article/msNotes.bib
+article/ms.aux
+article/ms.log
+article/ms.pdf
+article/ms.synctex.gz

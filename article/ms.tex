@@ -17,13 +17,12 @@
 
 %\submitjournal{AAS Journals}
 
-\shorttitle{Short title}
-\shortauthors{Casey et al.}
+\shorttitle{Stellar multiplicity}
+\shortauthors{Casey \& Hogg}
 
 \begin{document}
 
-
-\title{Binarity and other things in Gaia}
+\title{Stellar multiplicity}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -63,31 +62,49 @@ Velociraptors can't see you if you don't move. (\Gaia can see you if you can.)
 
 \section{Model}
 
-% What is provided by Gaia?
-% astrometric excess, number of measurements, brightness, etc
-% what is the error model that Gaia uses?
-% WE COULD USE A HIErARCHICAL MODEL FOR THE ERRORS
-% Thus for a single star we would expect, so we can calculate
-% p(\ra, \dec|data)
+% The effect of binaries.
 
-
-% For stars with a companion, if the companion is large enough to induce an effect on the primary then this would produce astrometric noise that would  be observable in the
-
-
-% Astrometric model:
-
-
-% Can we do this for DR1 already?
+% RV noise vs astrometric excess noise.
 
 % When would we expect to see astrometric noise and not RV noise, and vice-versa? in what situations?
 
+% Here we base our model using RV data only from Gaia DR2.
 
-% we can calculate probability that it is consistent with a single  star,... p-value?
+% Some fraction of stars in Gaia are single star systems (or have such low semi-amplitudes that would not be detected by Gaia), and we will use those stars (within a mixture model) to calibrate the radial velocity error floor
 
+% We will do this on individual epoch measurements
 
-% From the Gaia expected error distributions: how many stars might we be able to discriminate between?
+% ASSUMPTIONS
+
+% MODEL
+
+% CALIBRATION SAMPLE (including ADQL query)
+
+% Fitting the model:
+
+% Comparisons of residuals with other stellar properties.
+
+% What is the RV error that Gaia can measure in a single epoch for a given magnitude vs colour, etc. 
+
+% What are the distributions of orbital parameters of binary systems that we would be able to detect?
+
+% Calculating a probability of binarity for every star, taking the non-measurements into account!
+
+% Completeness cuts,.... selection effects?
 
 \section{Results}
+
+% Binary fraction in the spaces that we were fitting: rp flux, colour, etc, just showing the transition of  probabilities
+
+% Binary fraction as a function of fitting properties, and other stellar properties from Gaia
+
+% Binarity across the H-R diagram
+
+% Binarity with metallicity 
+
+% Binarity at height above the plane?
+
+% Binarity in clusters vs the plane?
 
 
 \section{Discussion}
