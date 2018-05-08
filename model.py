@@ -16,7 +16,7 @@ plt.style.use(mpl_style)
 
 np.random.seed(42)
 
-def _savefig(fig, basename, dry_run=True, **kwargs):
+def _savefig(fig, basename, dry_run=False, **kwargs):
     kwds = dict(dpi=300)
     kwds.update(kwargs)
     if not dry_run:
@@ -164,7 +164,7 @@ data.update(
     M=mu_design_matrix.shape[0],
     S=sigma_design_matrix.shape[0])
 
-init = dict(outlier_fraction=0.1, mu_coefficients=initial_mu_coefficients,
+init = dict(theta=0.1, mu_coefficients=initial_mu_coefficients,
     sigma_coefficients=initial_sigma_coefficients)
 
 
