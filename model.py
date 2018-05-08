@@ -329,9 +329,9 @@ for label_name, description, is_log in shorthand_parameters:
         right_edge = equidensity_bins[i + 1]
 
         in_bin = (right_edge > subset_x) * (subset_x >= left_edge)
-        equidensity_f_rv_variance[i] += np.sum(has_excess_rv_variance * in_bin) \
+        equidensity_f_rv_variance[i] += np.sum(subset_has_excess_rv_variance * in_bin) \
                                       / np.sum(in_bin)
-        equidensity_f_rv_variance_error[i] += np.sqrt(np.sum(has_excess_rv_variance * in_bin)) \
+        equidensity_f_rv_variance_error[i] += np.sqrt(np.sum(subset_has_excess_rv_variance * in_bin)) \
                                             / np.sum(in_bin)
 
 
@@ -378,8 +378,8 @@ def plot_model_residuals(samples, subset, label_name, semilogx=False,
     mean_sigma_coefficients = np.mean(
         samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
 
-    mu_design_matrix = get_mu_design_matrix(subset)
-    sigma_design_matrix = get_sigma_design_matrix(subset)
+    mu_design_matrix, _ = get_mu_design_matrix(subset)
+    sigma_design_matrix, _ = get_sigma_design_matrix(subset)
 
     subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
     subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
@@ -423,8 +423,8 @@ def plot_excess_rv_variance(samples, subset, label_name, semilogx=False,
     mean_sigma_coefficients = np.mean(
         samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
 
-    mu_design_matrix = get_mu_design_matrix(subset)
-    sigma_design_matrix = get_sigma_design_matrix(subset)
+    mu_design_matrix, _ = get_mu_design_matrix(subset)
+    sigma_design_matrix, _ = get_sigma_design_matrix(subset)
 
     subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
     subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
@@ -458,6 +458,8 @@ def plot_excess_rv_variance(samples, subset, label_name, semilogx=False,
 plot_model_residuals(samples, subset, "bp_rp")
 plot_excess_rv_variance(samples, subset, "bp_rp")
 
+
+
 def _calculate_significant_rv_variance(samples, subset):
     mean_mu_coefficients = np.mean(
         samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
@@ -465,38 +467,96 @@ def _calculate_significant_rv_variance(samples, subset):
     mean_sigma_coefficients = np.mean(
         samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
 
-    mu_design_matrix = get_mu_design_matrix(subset)
-    sigma_design_matrix = get_sigma_design_matrix(subset)
+    mu_design_matrix, _ = get_mu_design_matrix(subset)
+    sigma_design_matrix, _ = get_sigma_design_matrix(subset)
 
     subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
     subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
 
+    # What is the radial velocity variance we would expect given the number of
+    # transients?
+
+    maximum_expected_rv_variance = 0.5 * np.pi * (subset_mu + 3 * subset_sigma) \
+                                 / subset["rv_nb_transits"]
+
     rv_excess = np.clip(
-        subset["radial_velocity_error"]**2 - (subset_mu + 3 * subset_sigma),
+        subset["radial_velocity_error"]**2 - maximum_expected_rv_variance,
         0, np.inf)
 
     return rv_excess
 
-rv_excess = _calculate_significant_rv_variance(samples, subset)
+
+sources = Table.read("data/rv_calibration_floor_subset-result.fits.gz")
+
+# Take the rv_nb_transits into account
+sources["radial_velocity_scatter"] = sources["radial_velocity_error"] \
+                                   * np.sqrt(sources["rv_nb_transits"]) \
+                                   / np.sqrt(np.pi/2.0)
+
+sources["phot_g_abs_mag"] = sources["phot_g_mean_mag"] + 5 * np.log10(sources["parallax"]/100.0)
+
+good = (sources["parallax"] > 0) * ((sources["parallax"]/sources["parallax_error"]) > 5)
+sources["phot_g_abs_mag"][~good] = np.nan
+
+
+
+rv_excess = _calculate_significant_rv_variance(samples, sources)
 
 
 
 # Plot the excess variance on a H-R diagram.
-fig, ax = plt.subplots()
-ordered = np.argsort(rv_excess)[::-1]
-scat = ax.scatter(subset["bp_rp"][ordered], subset["phot_g_abs_mag"][ordered],
-    c=rv_excess[ordered], s=1, cmap="viridis")
+fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+has_excess = rv_excess > 0
+axes[0].scatter(sources["bp_rp"], sources["phot_g_abs_mag"], s=1,
+    facecolor="k", zorder=-1, alpha=0.05, rasterized=True)
+scat = axes[0].scatter(
+    sources["bp_rp"][has_excess], sources["phot_g_abs_mag"][has_excess],
+   zorder=10, alpha=0.05, s=1, rasterized=True)
 
-"""
-plt.colorbar(scat)
-"""
+axes[0].set_xlabel(r"\textrm{bp-rp}")
+axes[0].set_ylabel(r"\textrm{absolute Gaia magnitude}")
 
-ax.set_xlabel(r"\textrm{bp-rp}")
-ax.set_ylabel(r"\textrm{absolute Gaia magnitude}")
+axes[0].xaxis.set_major_locator(MaxNLocator(6))
+axes[0].yaxis.set_major_locator(MaxNLocator(6))
 
-ax.xaxis.set_major_locator(MaxNLocator(6))
-ax.yaxis.set_major_locator(MaxNLocator(6))
+axes[0].set_xlim(0, 4)
+axes[0].set_ylim(12, -4)
+
+
+# Plot the fraction with excess variance on the HR diagram.
+N_bins = 100
+finite = np.isfinite(sources["bp_rp"] * sources["phot_g_abs_mag"])
+H_all, xedges, yedges = np.histogram2d(
+    sources["bp_rp"][finite],
+    sources["phot_g_abs_mag"][finite],
+    bins=(N_bins, N_bins))
+
+H_bin, _, __ = np.histogram2d(
+    sources["bp_rp"][has_excess * finite],
+    sources["phot_g_abs_mag"][has_excess * finite],
+    bins=(xedges, yedges))
+
+H = H_bin/H_all
+#H[~np.isfinite(H)] = 0.0
+H[(H == 1) * (H_all < 2)] = np.nan
+
+image = axes[1].imshow(H.T, extent=(xedges[0], xedges[-1], yedges[-1], yedges[0]),
+    aspect=np.ptp(xedges)/np.ptp(yedges), cmap="viridis")
+
 
 fig.tight_layout()
 
+cbar = plt.colorbar(image, ax=list(axes))
+cbar.set_label(r"\textrm{binary fraction}")
 
+
+axes[1].set_xlim(axes[0].get_xlim()) 
+axes[1].set_ylim(axes[0].get_ylim()) 
+
+axes[1].set_xlabel(r"\textrm{bp-rp}")
+axes[1].set_ylabel(r"\textrm{absolute Gaia magnitude}")
+
+axes[1].xaxis.set_major_locator(MaxNLocator(6))
+axes[1].yaxis.set_major_locator(MaxNLocator(6))
+
+_savefig(fig, "hrd-binary-fraction")
