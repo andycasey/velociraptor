@@ -1,0 +1,105 @@
+\documentclass[twocolumn]{aastex61}
+\usepackage{bm}
+
+\newcommand\teff{T_{\rm eff}}
+\newcommand\logg{\log{g}}
+\newcommand\feh{[\rm{Fe}/\rm{H}]}
+\newcommand\mh{[\rm{M}/\rm{H}]}
+
+\newcommand{\project}[1]{\textsl{#1}}
+\newcommand{\acronym}[1]{{\small{#1}}}
+\newcommand{\Gaia}{\project{Gaia}}
+\newcommand{\gaia}{\project{gaia}}
+
+\received{2018 XX XX}
+\revised{2018 XX XX}
+\accepted{2018 XX XX}
+
+%\submitjournal{AAS Journals}
+
+\shorttitle{Short title}
+\shortauthors{Casey et al.}
+
+\begin{document}
+
+
+\title{Binarity and other things in Gaia}
+
+\correspondingauthor{Andrew R. Casey}
+\email{andrew.casey@monash.edu}
+
+\author[0000-0003-0174-0564]{Andrew R. Casey}
+\affiliation{School of Physics \& Astronomy, Monash University, Clayton 3800, 
+    Victoria, Australia}
+\affiliation{Faculty of Information Technology, Monash University, Clayton 3800, 
+    Victoria, Australia}
+
+\author[0000-0003-2866-9403]{David W. Hogg}
+\affiliation{Center for Cosmology and Particle Physics, Department of Physics,
+    New York University, 726 Broadway, New York, NY 10003, USA}
+\affiliation{Center for Data Science, New York University, 60 Fifth Ave, 
+    New York, NY 10011, USA}
+\affiliation{Max-Planck-Institut f\"ur Astronomie, K\"onigstuhl 17, D-69117 
+    Heidelberg}
+\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
+
+\begin{abstract}
+Velociraptors can't see you if you don't move. (\Gaia can see you if you can.)
+\end{abstract}
+
+
+\keywords{stars: dynamics}
+
+\section{Introduction} \label{sec:intro}
+
+\begin{itemize}
+\item the binary fraciton is important
+\item Gaia provides exquisite astrometry and RV measurements over many years
+\item The errors in these quantities are well-characterised
+\item When a star is in a binary system (or triary, etc), there will be excess scatter relative to a single star of the primary's properties
+\item the excess RV noise (and in DR1 or DR3, excess astrometric noise) can be used to infer the presence of a companion
+\end{itemize}
+
+
+\section{Model}
+
+% What is provided by Gaia?
+% astrometric excess, number of measurements, brightness, etc
+% what is the error model that Gaia uses?
+% WE COULD USE A HIErARCHICAL MODEL FOR THE ERRORS
+% Thus for a single star we would expect, so we can calculate
+% p(\ra, \dec|data)
+
+
+% For stars with a companion, if the companion is large enough to induce an effect on the primary then this would produce astrometric noise that would  be observable in the
+
+
+% Astrometric model:
+
+
+% Can we do this for DR1 already?
+
+% When would we expect to see astrometric noise and not RV noise, and vice-versa? in what situations?
+
+
+% we can calculate probability that it is consistent with a single  star,... p-value?
+
+
+% From the Gaia expected error distributions: how many stars might we be able to discriminate between?
+
+\section{Results}
+
+
+\section{Discussion}
+
+
+
+\software{numpy, scipy, astropy, Stan}
+
+\acknowledgements
+- Gaia/DPAC
+- Gaia archive?
+- Gaia DR2 hack week at Flatiron
+
+
+\end{document}
