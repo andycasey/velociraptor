@@ -30,7 +30,7 @@ def _savefig(fig, basename, dry_run=True, **kwargs):
 
 #gaia_sources = Table.read("data/rv_floor_cal-result.fits")
 
-subset = Table.read("data/rv_floor_cal_subset-result.fits.gz")
+subset = Table.read("data/rv_calibration_floor_subset-result.fits.gz")
 
 # Take a random subset of stars.
 subset_indices = np.random.choice(len(subset), size=10000, replace=False)
@@ -131,22 +131,31 @@ data = dict(N=N, rv_variance=rv_variance[qc], flux=rp_flux[qc])
 
 
 def get_mu_design_matrix(subset):
-    return np.array([
+    dm = np.array([
         np.ones(len(subset)),
         subset["phot_rp_mean_flux"]**-1,
         subset["phot_rp_mean_flux"]**-2,
     ])
+    #(subset["phot_bp_mean_flux"] - subset["phot_rp_mean_flux"])**-1,
+    #(subset["phot_bp_mean_flux"] - subset["phot_rp_mean_flux"])**-2,
+    initial = np.array([1e-2, 1e5, 1e10])# 1e-2, 1e-2])
+    return (dm, initial)
+
 
 def get_sigma_design_matrix(subset):
-    return np.array([
+    dm = np.array([
         np.ones(len(subset)),
         subset["phot_rp_mean_flux"]**-1,
         subset["phot_rp_mean_flux"]**-2,
     ])
+    #    (subset["phot_bp_mean_flux"] - subset["phot_rp_mean_flux"])**-1,
+    #    (subset["phot_bp_mean_flux"] - subset["phot_rp_mean_flux"])**-2,
+    initial = np.array([1e-2, 1e5, 1e10])# 1e-2, 1e-2])
+    return (dm, initial)
 
 
-mu_design_matrix = get_mu_design_matrix(subset[qc])
-sigma_design_matrix = get_sigma_design_matrix(subset[qc])
+mu_design_matrix, initial_mu_coefficients = get_mu_design_matrix(subset[qc])
+sigma_design_matrix, initial_sigma_coefficients = get_sigma_design_matrix(subset[qc])
 
 
 data.update(
@@ -155,9 +164,8 @@ data.update(
     M=mu_design_matrix.shape[0],
     S=sigma_design_matrix.shape[0])
 
-init = dict(outlier_fraction=0.1,
-    mu_coefficients=np.array([1e-2, 1e5, 1e10]),
-    sigma_coefficients=np.array([1e-2, 1e5, 1e10]))
+init = dict(outlier_fraction=0.1, mu_coefficients=initial_mu_coefficients,
+    sigma_coefficients=initial_sigma_coefficients)
 
 
 model = stan.load_stan_model("model.stan")
@@ -168,7 +176,7 @@ xi = np.logspace(np.log10(rp_flux[qc].min()), np.log10(rp_flux[qc].max()), 100)
 
 fig, ax = plt.subplots()
 ax.scatter(data["flux"], data["rv_variance"], **scatter_kwds)
-ax.plot(xi, np.polyval(p_opt["mu_coefficients"][::-1], 1.0/xi), c="r", lw=2, zorder=1000)
+ax.plot(xi, np.polyval(p_opt["mu_coefficients"][:3][::-1], 1.0/xi), c="r", lw=2, zorder=1000)
 ax.semilogx()
 ax.set_xlabel(r"\textrm{mean rp flux}")
 ax.set_ylabel(r"\textrm{radial velocity variance} $(\textrm{km\,s}^{-1})$")
@@ -187,8 +195,8 @@ samples = model.sampling(**stan.sampling_kwds(data=data, chains=2, iter=2000,
 mu_coefficients = np.mean(samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
 sigma_coefficients = np.mean(samples.extract(("sigma_coefficients", ))["sigma_coefficients"], axis=0)
 
-mu = np.polyval(mu_coefficients[::-1], 1.0/xi)
-sigma = np.polyval(sigma_coefficients[0:3][::-1], 1.0/xi)
+mu = np.polyval(mu_coefficients[:3][::-1], 1.0/xi)
+sigma = np.polyval(sigma_coefficients[:3][::-1], 1.0/xi)
 
 fig, ax = plt.subplots()
 ax.scatter(data["flux"], data["rv_variance"], **scatter_kwds)
@@ -376,7 +384,7 @@ def plot_model_residuals(samples, subset, label_name, semilogx=False,
     subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
     subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
 
-    rv_residual = subset["radial_velocity_error"]**2 - subset_mu
+    rv_residual = subset["radial_velocity_scatter"]**2 - subset_mu
     rv_residual_significance = rv_residual/subset_sigma
 
 
@@ -421,11 +429,11 @@ def plot_excess_rv_variance(samples, subset, label_name, semilogx=False,
     subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
     subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
 
-    rv_residual = subset["radial_velocity_error"]**2 - subset_mu
+    rv_residual = subset["radial_velocity_scatter"]**2 - subset_mu
     rv_residual_significance = rv_residual/subset_sigma
 
     map_rv_excess = np.clip(
-        subset["radial_velocity_error"]**2 - (subset_mu + 3 * subset_sigma),
+        subset["radial_velocity_scatter"]**2 - (subset_mu + 3 * subset_sigma),
         0,
         np.inf)
 
@@ -449,5 +457,46 @@ def plot_excess_rv_variance(samples, subset, label_name, semilogx=False,
 
 plot_model_residuals(samples, subset, "bp_rp")
 plot_excess_rv_variance(samples, subset, "bp_rp")
+
+def _calculate_significant_rv_variance(samples, subset):
+    mean_mu_coefficients = np.mean(
+        samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
+
+    mean_sigma_coefficients = np.mean(
+        samples.extract(("mu_coefficients", ))["mu_coefficients"], axis=0)
+
+    mu_design_matrix = get_mu_design_matrix(subset)
+    sigma_design_matrix = get_sigma_design_matrix(subset)
+
+    subset_mu = np.dot(mean_mu_coefficients, mu_design_matrix)
+    subset_sigma = np.dot(mean_sigma_coefficients, sigma_design_matrix)
+
+    rv_excess = np.clip(
+        subset["radial_velocity_error"]**2 - (subset_mu + 3 * subset_sigma),
+        0, np.inf)
+
+    return rv_excess
+
+rv_excess = _calculate_significant_rv_variance(samples, subset)
+
+
+
+# Plot the excess variance on a H-R diagram.
+fig, ax = plt.subplots()
+ordered = np.argsort(rv_excess)[::-1]
+scat = ax.scatter(subset["bp_rp"][ordered], subset["phot_g_abs_mag"][ordered],
+    c=rv_excess[ordered], s=1, cmap="viridis")
+
+"""
+plt.colorbar(scat)
+"""
+
+ax.set_xlabel(r"\textrm{bp-rp}")
+ax.set_ylabel(r"\textrm{absolute Gaia magnitude}")
+
+ax.xaxis.set_major_locator(MaxNLocator(6))
+ax.yaxis.set_major_locator(MaxNLocator(6))
+
+fig.tight_layout()
 
 

@@ -15,8 +15,8 @@ transformed data {
 
 parameters {
   real<lower=0, upper=1> outlier_fraction;
-  vector<lower=1e-3, upper=1e12>[M] mu_coefficients;
-  vector<lower=1e-3, upper=1e12>[S] sigma_coefficients;
+  vector<lower=0, upper=1e12>[M] mu_coefficients;
+  vector<lower=0, upper=1e12>[S] sigma_coefficients;
 }
 
 transformed parameters {
@@ -36,3 +36,17 @@ model {
                       normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]));
     }
 }
+
+generated quantities {
+  real log_ps1;
+  real log_ps2;
+  real log_membership_probability[N];
+  for (n in 1:N) {
+    log_ps1 = log(outlier_fraction) 
+            + uniform_lpdf(rv_variance[n] | rvf_mu[n], max_rv_variance);
+    log_ps2 = log1m(outlier_fraction)
+            + normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]);
+    log_membership_probability[n] = log_ps1 - log_sum_exp(log_ps1, log_ps2);
+  }
+}
+
