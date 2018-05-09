@@ -3,9 +3,11 @@
 Code for the velociraptor project.
 """
 
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table
+from matplotlib.ticker import MaxNLocator
 
 import stan_utils as stan
 from mpl_style import mpl_style
@@ -39,24 +41,32 @@ def load_gaia_sources(path, N=None, **kwargs):
 
     if N is not None:
         S = len(sources)
-        return sources[np.random.choice(S, size=min(N, S), replace=False)]
+        return sources[np.random.choice(S, size=min(int(N), S), replace=False)]
     return sources
 
 
-def prepare_model(phot_rp_mean_flux, rv_single_epoch_variance, 
-    model_path="model.stan"):
+def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan",
+    **source_params):
     """
     Compile the Stan model, and prepare the data and initialisation dictionaries
     for optimization and sampling.
 
-    :param phot_rp_mean_flux:
-        The mean RP flux.
-
     :param rv_single_epoch_variance:
         The variance in single epoch measurements of radial velocity.
 
+    :param target: [optional]
+        The target radial velocity variance to use when initialising the model
+        coefficients.
+
     :param model_path: [optional]
         The local path of the Stan model.
+
+    :Keyword Arguments:
+        * *source_params* (``dict``) These are passed directly to the
+        `_rvf_design_matrix`, so they should include all of the source labels
+        needed to construct the design matrix (e.g., `phot_rp_mean_flux`). The
+        array length for each source label should match that of
+        `rv_single_epoch_variance`.
 
     :returns:
         The compiled Stan model, the data dictionary, the initialsiation
@@ -64,17 +74,19 @@ def prepare_model(phot_rp_mean_flux, rv_single_epoch_variance,
         construct the data dictionary.
     """
 
-    dm = _rvf_design_matrix(phot_rp_mean_flux)
+    dm = _rvf_design_matrix(**source_params)
     finite = np.all(np.isfinite(dm), axis=0)
 
     if not all(finite):
-        print("Design matrix contains non-finite values! Masking out.")
-
+        logging.warn("Design matrix contains {0} (of {1}) non-finite values!"\
+                     "Exlcuding them from model fit.".format(
+                        sum(~finite), finite.size))
+    
     dm = dm[:, finite]
-    coeff = _rvf_initial_coefficients(dm)
+    coeff = _rvf_initial_coefficients(dm, target=target)
 
     init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
-    data = dict(N=sum(finite), rv_variance=rv_single_epoch_variance,
+    data = dict(N=sum(finite), rv_variance=rv_single_epoch_variance[finite],
         design_matrix=dm.T, M=dm.shape[0])
 
     model = stan.load_stan_model(model_path)
@@ -82,15 +94,20 @@ def prepare_model(phot_rp_mean_flux, rv_single_epoch_variance,
     return (model, data, init, finite)
 
 
-def _rvf_design_matrix(phot_rp_mean_flux):
+def _rvf_design_matrix(phot_rp_mean_flux, bp_rp, **kwargs):
     """
     Design matrix for the radial velocity floor variance.
+
+    # TODO: Should we check for finite-ness here?
     """
     return np.array([
         np.ones(len(phot_rp_mean_flux)),
         phot_rp_mean_flux**-1,
-        phot_rp_mean_flux**-2
+        phot_rp_mean_flux**-2,
+        bp_rp**-1,
+        bp_rp**-2
     ])
+
 
 
 def _rvf_initial_coefficients(design_matrix, target=0.01):
@@ -100,7 +117,7 @@ def _rvf_initial_coefficients(design_matrix, target=0.01):
     return target / (design_matrix.shape[0] * np.nanmean(design_matrix, axis=1))
 
 
-def predict_map_rv_single_epoch_variance(samples, *params):
+def predict_map_rv_single_epoch_variance(samples, **source_params):
     """
     Predict the maximum a-posteriori estimate of the radial velocity variance
     from a single epoch.
@@ -111,8 +128,129 @@ def predict_map_rv_single_epoch_variance(samples, *params):
 
     params = samples.extract(("mu_coefficients", "sigma_coefficients"))
 
-    dm = _rvf_design_matrix(*params)
+    dm = _rvf_design_matrix(**source_params)
     mu = np.dot(np.mean(params["mu_coefficients"], axis=0), dm)
     sigma = np.dot(np.mean(params["sigma_coefficients"], axis=0), dm)
     
     return (mu, sigma)
+
+
+def binary_probability(samples, **source_params):
+    """
+    Calculate the probability of binarity for Gaia sources, based on samples
+    from our MCMC.
+    """
+
+    raise NotImplementedError()
+
+
+
+def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
+    log_parameters=None, N=100, labels=None, **kwargs):
+    """
+    Make a corner plot showing the maximum a posteori radial velocity variance
+    for different (stellar) properties that contribute to the model.
+    
+    :param samples:
+        The MCMC samples.
+
+    :param sources: [optional]
+        A table of Gaia sources. This is used to determine the bounds on the
+        parameters. If `None` is given, then `parameter_limits` should be
+        given instead. If `sources` and `parameter_limits` are given, then the
+        `parameter_limits` will supercede those calculated from `sources.
+
+    :param parameter_limits: [optional]
+        A dictionary containing source parameters as keys and a two-length
+        tuple containing the lower and upper bounds of the parameter.
+    """
+
+    parameter_names = tuple(
+        set(_rvf_design_matrix.__code__.co_varnames).difference(["kwargs"]))
+
+    limits = dict()
+    if sources is not None:
+        for pn in parameter_names:
+            limits[pn] = (np.nanmin(sources[pn]), np.nanmax(sources[pn]))
+    else:
+        missing = tuple(set(parameter_names).difference(parameter_limits))
+        if len(missing) > 0:
+            raise ValueError("missing parameter limits for {}".format(
+                ", ".join(missing)))
+
+    if parameter_limits is not None:
+        limits.update(parameter_limits)
+
+    if log_parameters is None:
+        log_parameters = []
+
+    if labels is None:
+        labels = dict()
+
+    def mesh(parameter_name):
+        v = limits[parameter_name]
+        s, e = (np.min(v), np.max(v))
+
+        if parameter_name not in log_parameters:
+            return np.linspace(s, e, N)
+        else:
+            return np.logspace(np.log10(s), np.log10(e), N)
+
+    samples_kwd = kwargs.get("samples_kwd", "mu_coefficients")
+    coefficients = np.mean(samples.extract((samples_kwd, ))[samples_kwd], axis=0)
+    
+    P = len(limits)
+
+    fig, axes = plt.subplots(P, P, figsize=(6 * P, 6 * P))
+    axes = np.atleast_2d(axes)
+
+    for i, x_param in enumerate(parameter_names):
+        for j, y_param in enumerate(parameter_names):
+
+            ax = axes[i, j]
+
+            if i > j:
+                ax.set_visible(False)
+                continue
+
+            elif i == j:
+
+                x = mesh(x_param)
+
+                map_value = np.dot(coefficients, _rvf_design_matrix(**dict([
+                    (x_param, x.flatten())])))
+
+                ax.plot(x, map_value, 'r-')
+
+                if x_param in log_parameters:
+                    ax.semilogx()
+
+            else:
+
+                x, y = mesh(x_param), mesh(y_param)
+                x_mesh, y_mesh = np.meshgrid(x, y)
+
+                map_value = np.dot(coefficients, _rvf_design_matrix(**dict([
+                    (x_param, x_mesh.flatten()),
+                    (y_param, y_mesh.flatten())
+                ])))
+
+
+            ax.yaxis.set_major_locator(MaxNLocator(6))
+
+            if ax.is_first_col():
+                ax.set_ylabel(r"\textrm{single epoch radial velocity variance}"\
+                              r" $(\textrm{km}^2\,\textrm{s}^{-2})$")
+
+            else:
+                ax.set_yticklabels([])
+
+            if ax.is_last_row():
+                ax.set_xlabel(labels.get(x_param, x_param))
+
+            else:
+                ax.set_xticklabels([])
+
+    fig.tight_layout()
+
+    raise a
