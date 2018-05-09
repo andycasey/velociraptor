@@ -562,14 +562,15 @@ _savefig(fig, "hrd-binary-fraction")
 
 
 # Nect steps:
-# [ ] decide what to plot as "residual"
+# [X] decide what to plot as "residual" --> MAP estimate.
 # [ ] plot "residual" vs other stellar parameters and decide if they need to be
 #     accounted for when fitting:
 #       [ ] absolute luminosity / stellar luminosity
 #       [ ] bp flux - rp flux
 #       [ ] which RV template was used
 #       [ ] RV template properties minus a guess at the stellar properties
-#       [ ] 
+# [ ] fit a model using just dwarfs, and another model using just giants: how do they compare?
+# [ ] 
     
 
 
