@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import velociraptor
 
 # Load the data and make some plots.
-sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz", N=1e3)
+sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz", N=1e4)
 
 model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(**sources)
 

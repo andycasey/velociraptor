@@ -3,7 +3,7 @@ data  {
   int N; // number of sources
   int M; // columns in the design matrix
   real rv_variance[N]; // radial velocity variance on single epoch measurements
-  matrix[N, M] design_matrix; // design matrix 
+  row_vector[M] design_matrix[N];
 }
 
 transformed data {
