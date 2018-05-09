@@ -1,11 +1,9 @@
 
 data  {
   int N; // number of sources
-  int M; // columns in the design matrix for the rv floor mu
-  int S; // columns in the design matrix for the rv floor scatter
+  int M; // columns in the design matrix
   real rv_variance[N]; // radial velocity variance on single epoch measurements
-  matrix[N, M] mu_design_matrix; // design matrix for rv floor mu
-  matrix[N, S] sigma_design_matrix; // design matrix for rv floor sigma
+  matrix[N, M] design_matrix; // design matrix 
 }
 
 transformed data {
@@ -16,15 +14,15 @@ transformed data {
 parameters {
   real<lower=0, upper=1> theta;
   vector<lower=0, upper=1e12>[M] mu_coefficients;
-  vector<lower=0, upper=1e12>[S] sigma_coefficients;
+  vector<lower=0, upper=1e12>[M] sigma_coefficients;
 }
 
 transformed parameters {
   real<lower=0> rvf_mu[N];    // RV floor mu
   real<lower=0> rvf_sigma[N]; // RV floor scatter
   for (n in 1:N) {
-    rvf_mu[n] = dot_product(mu_design_matrix[n], mu_coefficients);
-    rvf_sigma[n] = dot_product(sigma_design_matrix[n], sigma_coefficients);
+    rvf_mu[n] = dot_product(design_matrix[n], mu_coefficients);
+    rvf_sigma[n] = dot_product(design_matrix[n], sigma_coefficients);
   }
 }
 

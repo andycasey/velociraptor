@@ -2,6 +2,8 @@
 # A matplotlib style based on the gala package by @adrn:
 # github.com/adrn/gala
 
+import numpy as np
+
 mpl_style = {
 
     # Lines
@@ -68,3 +70,21 @@ mpl_style = {
     # Other
     'savefig.dpi': 300,
 }
+
+
+
+
+def plot_histogram_steps(ax, x_bins, y, y_err):
+
+    xx = np.array(x_bins).repeat(2)[1:]
+    xstep = np.repeat((x_bins[1:] - x_bins[:-1]), 2)
+    xstep = np.concatenate(([xstep[0]], xstep, [xstep[-1]]))
+    # Now: add one step at end of row.
+    xx = np.append(xx, xx.max() + xstep[-1]) - xstep/2.0
+
+    yy = np.array(y).repeat(2)
+
+    _ = ax.plot(xx, yy, '-')
+    ax.errorbar(x_bins, y, y_err, fmt=None, capsize=0, ecolor=_[0].get_color())
+
+    return (xx, yy)
