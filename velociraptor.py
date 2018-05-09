@@ -201,55 +201,85 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
     
     P = len(limits)
 
+    # Calculate the expected radial velocity variance for all combinations of
+    # parameters.
+    combinations = np.meshgrid(*[mesh(pn) for pn in parameter_names])
+    grid_combinations = np.vstack([comb.flatten() for comb in combinations])
+
+    expectation = np.dot(coefficients, _rvf_design_matrix(**dict(zip(
+        parameter_names, grid_combinations))))
+
     fig, axes = plt.subplots(P, P, figsize=(6 * P, 6 * P))
     axes = np.atleast_2d(axes)
+
 
     for i, x_param in enumerate(parameter_names):
         for j, y_param in enumerate(parameter_names):
 
-            ax = axes[i, j]
+            ax = axes[j, i]
 
             if i > j:
                 ax.set_visible(False)
                 continue
 
             elif i == j:
+                x = grid_combinations[i]
+                idx = np.argsort(x)
 
-                x = mesh(x_param)
+                # Get the mean at each unique x.
+                x_uniques = np.sort(np.unique(x))
+                y_percentiles = np.zeros((3, x_uniques.size), dtype=float)
 
-                map_value = np.dot(coefficients, _rvf_design_matrix(**dict([
-                    (x_param, x.flatten())])))
+                for k, x_unique in enumerate(x_uniques):
+                    match = (grid_combinations[i] == x_unique)
+                    y_percentiles[:, k] = np.percentile(
+                        expectation[match], [0, 50, 100])
 
-                ax.plot(x, map_value, 'r-')
-
+                ax.plot(x_uniques, y_percentiles[1], "r-")
+                ax.fill_between(
+                    x_uniques, y_percentiles[0], y_percentiles[2],
+                    facecolor="r", alpha=0.3, edgecolor="none")
+                
                 if x_param in log_parameters:
                     ax.semilogx()
 
-            else:
-
-                x, y = mesh(x_param), mesh(y_param)
-                x_mesh, y_mesh = np.meshgrid(x, y)
-
-                map_value = np.dot(coefficients, _rvf_design_matrix(**dict([
-                    (x_param, x_mesh.flatten()),
-                    (y_param, y_mesh.flatten())
-                ])))
-
-
-            ax.yaxis.set_major_locator(MaxNLocator(6))
-
-            if ax.is_first_col():
+                ax.set_xlabel(labels.get(x_param, x_param))
                 ax.set_ylabel(r"\textrm{single epoch radial velocity variance}"\
                               r" $(\textrm{km}^2\,\textrm{s}^{-2})$")
-
+            
             else:
-                ax.set_yticklabels([])
+                x, y = grid_combinations[[i, j]]
 
-            if ax.is_last_row():
+                #if x_param in log_parameters:
+                #    ax.semilogx()
+
+                #if y_param in log_parameters:
+                #    ax.semilogy()
+
+                _x = np.log10(x) if x_param in log_parameters else x
+                _y = np.log10(y) if y_param in log_parameters else y
+
+
+                imshow_kwds = dict(cmap="Reds", aspect=np.ptp(_x)/np.ptp(_y),
+                    extent=(np.min(_x), np.max(_x), np.max(_y), np.min(_y)))
+
+                ax.imshow(expectation.reshape((N, N)), **imshow_kwds)
+
+                """
+                if x_param in log_parameters:
+                    ax.semilogx()
+
+                if y_param in log_parameters:
+                    ax.semilogy()
+                """
+
+                #    extent=(np.min(x), np.max(x), np.max(y), np.min(y)),
+                #    aspect=np.ptp(x)/np.ptp(y), cmap="Reds")
+
                 ax.set_xlabel(labels.get(x_param, x_param))
+                ax.set_ylabel(labels.get(y_param, y_param))
+                raise a
 
-            else:
-                ax.set_xticklabels([])
 
     fig.tight_layout()
 

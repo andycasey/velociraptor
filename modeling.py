@@ -18,8 +18,9 @@ samples = model.sampling(**velociraptor.stan.sampling_kwds(
 
 
 velociraptor.plot_model_predictions_corner(samples, sources,
-    log_parameters=("phot_rp_mean_flux", ),
-    labels=dict(phot_rp_mean_flux=r"\textrm{mean rp flux}"))
+    log_parameters=("phot_rp_mean_flux", ), labels=dict(
+        phot_rp_mean_flux=r"\textrm{mean rp flux}",
+        bp_rp=r"\textrm{bp-rp}"))
 
 raise a
 
