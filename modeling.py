@@ -247,11 +247,59 @@ ax.set_ylabel(r"\textrm{absolute g magnitude}")
 fig.tight_layout()
 
 
-qc_giants = qc * (3 < sources["bp_rp"]) * (sources["bp_rp"] < 1.0) \
-          * (sources["absolute_g_mag"] > 2.5)
-qc_dwarfs = qc * (3 < sources["bp_rp"]) * (sources["bp_rp"] < 1.0) \
-          * (sources["absolute_g_mag"] < 2.5)
+qc_giants = qc * (3 > sources["bp_rp"]) * (sources["bp_rp"] > 1.0) \
+          * (sources["absolute_g_mag"] < 3)
+qc_dwarfs = qc * (3 > sources["bp_rp"]) * (sources["bp_rp"] > 1.0) \
+          * (sources["absolute_g_mag"] > 4)
 
 
+fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+
+for ax in axes:
+    ax.scatter(
+        sources["bp_rp"][qc],
+        sources["absolute_g_mag"][qc],
+        **scatter_kwds)
+
+    ax.set_ylim(ax.get_ylim()[::-1])
+
+    ax.set_xlabel(r"\textrm{bp - rp}")
+    ax.set_ylabel(r"\textrm{absolute g magnitude}")
+
+axes[0].scatter(
+    sources["bp_rp"][qc_dwarfs],
+    sources["absolute_g_mag"][qc_dwarfs],
+    s=5, zorder=10)
+axes[1].scatter(
+    sources["bp_rp"][qc_giants],
+    sources["absolute_g_mag"][qc_giants],
+    s=5, zorder=10)
+
+axes[0].set_title(r"\textrm{main-sequence stars}")
+axes[1].set_title(r"\textrm{giant stars}")
+
+fig.tight_layout()
+
+
+print("Number of stars in dwarf model: {}".format(sum(qc_dwarfs)))
+print("Number of stars in giant model: {}".format(sum(qc_giants)))
+
+
+# Run the model for each subset.
+dwarf_model, dwarf_data_dict, dwarf_init_dict, dwarf_used_in_fit \
+    = velociraptor.prepare_model(**sources[qc_dwarfs])
+
+dwarf_p_opt = dwarf_model.optimizing(data=dwarf_data_dict, init=dwarf_init_dict)
+dwarf_samples = dwarf_model.sampling(**velociraptor.stan.sampling_kwds(
+    data=dwarf_data_dict, chains=2, iter=2000, init=dwarf_p_opt))
+
+
+
+giant_model, giant_data_dict, giant_init_dict, giant_used_in_fit \
+    = velociraptor.prepare_model(**sources[qc_dwarfs])
+
+giant_p_opt = giant_model.optimizing(data=giant_data_dict, init=giant_init_dict)
+giant_samples = giant_model.sampling(**velociraptor.stan.sampling_kwds(
+    data=giant_data_dict, chains=2, iter=2000, init=giant_p_opt))
 
 
