@@ -1,4 +1,11 @@
 
+// Mixture model for the minimum detectable radial velocity variance from a
+// single epoch Gaia/RVS measurement
+
+// Sampling cost: ~20 seconds for ~1e3 stars w/ 2 chains and 2000 iterations
+//                ~200 seconds for ~1e4 stars w/ 2 chains and 2000 iterations
+//                ~40 hours for 7,224,631 stars w/ 2 chains and 2000 iterations
+
 data  {
   int N; // number of sources
   int M; // columns in the design matrix
@@ -47,4 +54,3 @@ generated quantities {
     log_membership_probability[n] = log_ps1 - log_sum_exp(log_ps1, log_ps2);
   }
 }
-
