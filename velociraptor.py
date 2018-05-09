@@ -163,6 +163,11 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
     :param parameter_limits: [optional]
         A dictionary containing source parameters as keys and a two-length
         tuple containing the lower and upper bounds of the parameter.
+
+    :param log_parameters: [optional]
+        A tuple containing the parameter names that should be shown in log space
+
+    ""
     """
 
     parameter_names = tuple(
@@ -259,26 +264,29 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
                 _x = np.log10(x) if x_param in log_parameters else x
                 _y = np.log10(y) if y_param in log_parameters else y
 
+                # failed
+                #imshow_kwds = dict(cmap="Reds", aspect=np.ptp(x)/np.ptp(y),
+                #    extent=(np.min(x), np.max(x), np.max(y), np.min(y)))
 
-                imshow_kwds = dict(cmap="Reds", aspect=np.ptp(_x)/np.ptp(_y),
+                imshow_kwds = dict(cmap="Reds", aspect="auto",
+                    extent=(np.min(x), np.max(x), np.max(y), np.min(y)))
+
+                imshow_kwds = dict(cmap="Reds", aspect="auto",
                     extent=(np.min(_x), np.max(_x), np.max(_y), np.min(_y)))
 
-                ax.imshow(expectation.reshape((N, N)), **imshow_kwds)
-
-                """
                 if x_param in log_parameters:
                     ax.semilogx()
 
                 if y_param in log_parameters:
                     ax.semilogy()
-                """
+
+                ax.imshow(expectation.reshape((N, N)), **imshow_kwds)
 
                 #    extent=(np.min(x), np.max(x), np.max(y), np.min(y)),
                 #    aspect=np.ptp(x)/np.ptp(y), cmap="Reds")
 
                 ax.set_xlabel(labels.get(x_param, x_param))
                 ax.set_ylabel(labels.get(y_param, y_param))
-                raise a
 
 
     fig.tight_layout()
