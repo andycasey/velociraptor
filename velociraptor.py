@@ -8,11 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table
 from matplotlib.ticker import MaxNLocator
+from scipy.stats import norm
 
 import stan_utils as stan
-from mpl_style import mpl_style
+import mpl_utils
 
-plt.style.use(mpl_style)
+plt.style.use(mpl_utils.mpl_style)
 
 np.random.seed(42)
 
@@ -141,6 +142,12 @@ def binary_probability(samples, **source_params):
     from our MCMC.
     """
 
+    max_rv_variance = np.nanmax(source_params["rv_single_epoch_variance"])
+
+
+    log_ps1 = np.log(samples["theta"]) - np.log(max_rv_variance)
+    log_ps2 = np.log(1 - samples["theta"]) 
+
     raise NotImplementedError()
 
 
@@ -229,7 +236,6 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
 
             elif i == j:
                 x = grid_combinations[i]
-                idx = np.argsort(x)
 
                 # Get the mean at each unique x.
                 x_uniques = np.sort(np.unique(x))
@@ -255,25 +261,12 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
             else:
                 x, y = grid_combinations[[i, j]]
 
-                #if x_param in log_parameters:
-                #    ax.semilogx()
-
-                #if y_param in log_parameters:
-                #    ax.semilogy()
-
-                _x = np.log10(x) if x_param in log_parameters else x
-                _y = np.log10(y) if y_param in log_parameters else y
-
-                # failed
-                #imshow_kwds = dict(cmap="Reds", aspect=np.ptp(x)/np.ptp(y),
-                #    extent=(np.min(x), np.max(x), np.max(y), np.min(y)))
-
-                imshow_kwds = dict(cmap="Reds", aspect="auto",
+                #_x = np.log10(x) if x_param in log_parameters else x
+                #_y = np.log10(y) if y_param in log_parameters else y
+                
+                imshow_kwds = dict(cmap="Reds", aspect="equal",
                     extent=(np.min(x), np.max(x), np.max(y), np.min(y)))
-
-                imshow_kwds = dict(cmap="Reds", aspect="auto",
-                    extent=(np.min(_x), np.max(_x), np.max(_y), np.min(_y)))
-
+                
                 if x_param in log_parameters:
                     ax.semilogx()
 
@@ -281,14 +274,10 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
                     ax.semilogy()
 
                 ax.imshow(expectation.reshape((N, N)), **imshow_kwds)
-
-                #    extent=(np.min(x), np.max(x), np.max(y), np.min(y)),
-                #    aspect=np.ptp(x)/np.ptp(y), cmap="Reds")
-
+                
                 ax.set_xlabel(labels.get(x_param, x_param))
                 ax.set_ylabel(labels.get(y_param, y_param))
 
-
     fig.tight_layout()
 
-    raise a
+    return fig
