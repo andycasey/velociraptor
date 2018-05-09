@@ -27,7 +27,7 @@ transformed parameters {
 }
 
 model {
-  theta ~ beta(0.5, 0.5);
+  theta ~ beta(1, 5);
   for (n in 1:N) {
     target += log_mix(theta,
                       uniform_lpdf(rv_variance[n] | 0, max_rv_variance),
