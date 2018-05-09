@@ -49,6 +49,9 @@ shorthand_parameters = [
     ("absolute_g_mag", "absolute g magnitude", False),
     ("absolute_bp_mag", "absolute bp magnitude", False),
     ("absolute_rp_mag", "absolute rp magnitude", False),
+    ("rv_template_teff", "rv template teff", False),
+    ("rv_template_logg", "rv template logg", False),
+    ("rv_template_fe_h", "rv template [Fe/H]", False),
 ]
 
 for label_name, description, is_semilogx in shorthand_parameters:
@@ -228,6 +231,26 @@ for label_name, description, is_semilogx in shorthand_parameters:
         ax.set_xlabel(r"\textrm{{{0}}}".format(description))
 
     fig.tight_layout()
+
+
+# OK let's do this for a sample of giants and a sample of dwarfs and then
+# compare.
+
+qc = (sources["parallax"] > 0) \
+   * ((sources["parallax"]/sources["parallax_error"]) > 5)
+
+fig, ax = plt.subplots()
+ax.scatter(sources["bp_rp"], sources["absolute_g_mag"], **scatter_kwds)
+ax.set_ylim(ax.get_ylim()[::-1])
+ax.set_xlabel(r"\textrm{bp - rp}")
+ax.set_ylabel(r"\textrm{absolute g magnitude}")
+fig.tight_layout()
+
+
+qc_giants = qc * (3 < sources["bp_rp"]) * (sources["bp_rp"] < 1.0) \
+          * (sources["absolute_g_mag"] > 2.5)
+qc_dwarfs = qc * (3 < sources["bp_rp"]) * (sources["bp_rp"] < 1.0) \
+          * (sources["absolute_g_mag"] < 2.5)
 
 
 
