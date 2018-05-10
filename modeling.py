@@ -320,30 +320,41 @@ shorthand_parameters = [
     ("phot_g_mean_mag", "mean g magnitude", False),
     ("phot_rp_mean_mag", "mean rp magnitude", False),
     ("phot_bp_mean_mag", "mean bp magnitude", False),
+    ("teff_val", "inferred temperature", False),
+    ("rv_template_teff", "rv template teff", False),
+    ("rv_template_logg", "rv template logg", False),
+    ("rv_template_fe_h", "rv template [Fe/H]", False),
 ]
 
-def _show_number_of_data_points(ax, N):
-    return ax.text(0.95, 0.95, r"${0:.0f}$".format(N), transform=ax.transAxes,
+def _show_text_upper_right(ax, text):
+    return ax.text(0.95, 0.95, text, transform=ax.transAxes,
         horizontalalignment="right", verticalalignment="top")
 
-def _smooth_model(x, y, yerr, is_semilogx, N_smooth_points=100, equidensity=True,
-    average_function=np.median):
-    if not equidensity:
+def _show_number_of_data_points(ax, N):
+    return _show_text_upper_right(ax, r"${0:.0f}$".format(N))
+
+
+N_smooth_points = 30
+equidensity = True
+
+def _smooth_model(x, y, yerr, is_semilogx, average_function=np.mean):
+    if equidensity:
         if is_semilogx:
-            xi = np.logspace(np.log10(x.min()), np.log10(x.max()), N_smooth_points)
+            xb = 10**np.percentile(np.log10(x), np.linspace(0, 100, N_smooth_points))
         else:
-            xi = np.linspace(x.min(), x.max(), N_smooth_points)
+            xb = np.percentile(x, np.linspace(0, 100, N_smooth_points))
 
     else:
         if is_semilogx:
-            xi = 10**np.percentile(np.log10(x), np.linspace(0, 100, N_smooth_points))
+            xb = np.logspace(np.log10(x.min()), np.log10(x.max()), N_smooth_points)
         else:
-            xi = np.percentile(x, np.linspace(0, 100, N_smooth_points))
+            xb = np.linspace(x.min(), x.max(), N_smooth_points)
 
+    xi = xb[:-1] + np.diff(xb)/2.
     yi = np.zeros_like(xi)
     yerri = np.zeros_like(xi)
-    for i, left_edge in enumerate(xi[:-1]):
-        right_edge = xi[i + 1]
+    for i, left_edge in enumerate(xb[:-1]):
+        right_edge = xb[i + 1]
         in_bin = (right_edge > x) * (x >= left_edge)
         yi[i] = average_function(y[in_bin])
         yerri[i] = average_function(yerr[in_bin])
@@ -370,17 +381,13 @@ for label_name, description, is_semilogx in shorthand_parameters:
     xi, yi, yerri = _smooth_model(
         x, dwarf_model_rv_sev_mu, dwarf_model_rv_sev_sigma, is_semilogx)
 
+    if label_name == "rv_template_fe_h":
+        raise a
+
     for ax in (axes[0], axes[2]):
-        #ax.plot(x[idx], dwarf_model_rv_sev_mu[idx], 
-        #    "r-", label=r"\textrm{main-sequence stars}")
         ax.plot(xi, yi, "r-")
-
-        ax.fill_between(
-            x[idx],
-            (dwarf_model_rv_sev_mu + dwarf_model_rv_sev_sigma)[idx],
-            (dwarf_model_rv_sev_mu - dwarf_model_rv_sev_sigma)[idx],
+        ax.fill_between(xi, yi - yerri, yi + yerri,
             facecolor="r", alpha=0.3, edgecolor="none")
-
 
     x = sources[label_name][qc_giants][giant_used_in_fit]
     y = giant_model_rv_sev_mu
@@ -396,13 +403,9 @@ for label_name, description, is_semilogx in shorthand_parameters:
         x, giant_model_rv_sev_mu, giant_model_rv_sev_sigma, is_semilogx)
 
     for ax in (axes[1], axes[2]):
-        #ax.plot(x[idx], giant_model_rv_sev_mu[idx],
-        #    "b-", label=r"\textrm{giant stars}")
         ax.plot(xi, yi, "b-")
         ax.fill_between(
-            x[idx],
-            (giant_model_rv_sev_mu + giant_model_rv_sev_sigma)[idx],
-            (giant_model_rv_sev_mu - giant_model_rv_sev_sigma)[idx],
+            xi, yi - yerri, yi + yerri,
             facecolor="b", alpha=0.3, edgecolor="none")
 
     axes[0].set_title(r"\textrm{main-sequence stars}")
@@ -419,6 +422,11 @@ for label_name, description, is_semilogx in shorthand_parameters:
 
         ax.set_xlim(xlims)
         ax.set_ylim(axes[2].get_ylim())
+
+    _show_text_upper_right(
+        axes[2], 
+        r"$N_\textrm{{model bins}} = {0}$ \textrm{{(equi-{1})}}".format(
+            N_smooth_points, "density" if equidensity else "spaced"))
 
     fig.tight_layout()
 
