@@ -76,12 +76,13 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     """
 
     dm = _rvf_design_matrix(**source_params)
-    finite = np.all(np.isfinite(dm), axis=0)
+    finite = np.all(np.isfinite(dm), axis=0) \
+           * np.isfinite(rv_single_epoch_variance)
 
     if not all(finite):
-        logging.warn("Design matrix contains {0} (of {1}) non-finite values!"\
-                     "Exlcuding them from model fit.".format(
-                        sum(~finite), finite.size))
+        logging.warn("Design matrix contains {0} (of {1}; {2} are finite) "\
+                     "non-finite values! Exlcuding them from model fit."\
+                     .format(sum(~finite), finite.size, sum(finite)))
     
     dm = dm[:, finite]
     coeff = _rvf_initial_coefficients(dm, target=target)
