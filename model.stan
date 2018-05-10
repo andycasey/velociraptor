@@ -2,8 +2,8 @@
 // Mixture model for the minimum detectable radial velocity variance from a
 // single epoch Gaia/RVS measurement
 
-// Sampling cost: ~55 seconds for ~1e4 stars w/ 2 chains and 2000 iterations
-//                ~11 hours for 7,224,631 stars w/ 2 chains and 2000 iterations
+// Sampling cost: ~155 seconds for ~1e4 stars w/ 2 chains and 2000 iterations
+//                ~33 hours for 7,224,631 stars w/ 2 chains and 2000 iterations
 
 data  {
   int N; // number of sources
@@ -19,13 +19,13 @@ transformed data {
 
 parameters {
   real<lower=0, upper=1> theta;
-  vector<lower=0, upper=1e12>[M] mu_coefficients;
-  vector<lower=0, upper=1e12>[M] sigma_coefficients;
+  vector<lower=0>[M] mu_coefficients;
+  vector<lower=0>[M] sigma_coefficients;
 }
 
 transformed parameters {
-  real<lower=0> rvf_mu[N];    // RV floor mu
-  real<lower=0> rvf_sigma[N]; // RV floor scatter
+  real rvf_mu[N];    // RV floor mu
+  real rvf_sigma[N]; // RV floor scatter
   for (n in 1:N) {
     rvf_mu[n] = dot_product(design_matrix[n], mu_coefficients);
     rvf_sigma[n] = dot_product(design_matrix[n], sigma_coefficients);
@@ -34,9 +34,10 @@ transformed parameters {
 
 model {
   theta ~ beta(1, 5);
-  target += log_mix(theta, 
-                    background_uniform_lpdf,
-                    normal_lpdf(rv_variance | rvf_mu, rvf_sigma));
+  for (n in 1:N)
+    target += log_mix(theta, 
+                      background_uniform_lpdf,
+                      normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]));
 }
 
 generated quantities {
