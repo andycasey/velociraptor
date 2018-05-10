@@ -296,10 +296,135 @@ dwarf_samples = dwarf_model.sampling(**velociraptor.stan.sampling_kwds(
 
 
 giant_model, giant_data_dict, giant_init_dict, giant_used_in_fit \
-    = velociraptor.prepare_model(**sources[qc_dwarfs])
+    = velociraptor.prepare_model(**sources[qc_giants])
 
 giant_p_opt = giant_model.optimizing(data=giant_data_dict, init=giant_init_dict)
 giant_samples = giant_model.sampling(**velociraptor.stan.sampling_kwds(
     data=giant_data_dict, chains=2, iter=2000, init=giant_p_opt))
+
+
+
+
+# Plot the performance of the two models on the same figure.
+giant_model_rv_sev_mu, giant_model_rv_sev_sigma = \
+    velociraptor.predict_map_rv_single_epoch_variance(giant_samples, **sources[qc_giants])
+
+dwarf_model_rv_sev_mu, dwarf_model_rv_sev_sigma = \
+    velociraptor.predict_map_rv_single_epoch_variance(dwarf_samples, **sources[qc_dwarfs])
+
+shorthand_parameters = [
+    ("phot_rp_mean_flux", "mean rp flux", True),
+    ("phot_bp_mean_flux", "mean bp flux", True),
+    ("phot_g_mean_flux", "mean g flux", True),
+    ("bp_rp", "bp-rp colour", False),
+    ("phot_g_mean_mag", "mean g magnitude", False),
+    ("phot_rp_mean_mag", "mean rp magnitude", False),
+    ("phot_bp_mean_mag", "mean bp magnitude", False),
+]
+
+def _show_number_of_data_points(ax, N):
+    return ax.text(0.95, 0.95, r"${0:.0f}$".format(N), transform=ax.transAxes,
+        horizontalalignment="right", verticalalignment="top")
+
+def _smooth_model(x, y, yerr, is_semilogx, N_smooth_points=100, equidensity=True,
+    average_function=np.median):
+    if not equidensity:
+        if is_semilogx:
+            xi = np.logspace(np.log10(x.min()), np.log10(x.max()), N_smooth_points)
+        else:
+            xi = np.linspace(x.min(), x.max(), N_smooth_points)
+
+    else:
+        if is_semilogx:
+            xi = 10**np.percentile(np.log10(x), np.linspace(0, 100, N_smooth_points))
+        else:
+            xi = np.percentile(x, np.linspace(0, 100, N_smooth_points))
+
+    yi = np.zeros_like(xi)
+    yerri = np.zeros_like(xi)
+    for i, left_edge in enumerate(xi[:-1]):
+        right_edge = xi[i + 1]
+        in_bin = (right_edge > x) * (x >= left_edge)
+        yi[i] = average_function(y[in_bin])
+        yerri[i] = average_function(yerr[in_bin])
+
+    return (xi, yi, yerri)
+
+
+
+for label_name, description, is_semilogx in shorthand_parameters:
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    x = sources[label_name][qc_dwarfs][dwarf_used_in_fit]
+    y = dwarf_model_rv_sev_mu
+    idx = np.argsort(x)
+
+    axes[0].scatter(
+        x,
+        sources["rv_single_epoch_variance"][qc_dwarfs][dwarf_used_in_fit],
+        facecolor="r", s=1, alpha=0.05, rasterized=True)
+    _show_number_of_data_points(axes[0], len(x))
+
+    # Smooth out the effects.
+    xi, yi, yerri = _smooth_model(
+        x, dwarf_model_rv_sev_mu, dwarf_model_rv_sev_sigma, is_semilogx)
+
+    for ax in (axes[0], axes[2]):
+        #ax.plot(x[idx], dwarf_model_rv_sev_mu[idx], 
+        #    "r-", label=r"\textrm{main-sequence stars}")
+        ax.plot(xi, yi, "r-")
+
+        ax.fill_between(
+            x[idx],
+            (dwarf_model_rv_sev_mu + dwarf_model_rv_sev_sigma)[idx],
+            (dwarf_model_rv_sev_mu - dwarf_model_rv_sev_sigma)[idx],
+            facecolor="r", alpha=0.3, edgecolor="none")
+
+
+    x = sources[label_name][qc_giants][giant_used_in_fit]
+    y = giant_model_rv_sev_mu
+    idx = np.argsort(x)
+
+    axes[1].scatter(
+        x,
+        sources["rv_single_epoch_variance"][qc_giants][giant_used_in_fit],
+        facecolor="b", s=1, alpha=0.05, rasterized=True)
+    _show_number_of_data_points(axes[1], len(x))
+    
+    xi, yi, yerri = _smooth_model(
+        x, giant_model_rv_sev_mu, giant_model_rv_sev_sigma, is_semilogx)
+
+    for ax in (axes[1], axes[2]):
+        #ax.plot(x[idx], giant_model_rv_sev_mu[idx],
+        #    "b-", label=r"\textrm{giant stars}")
+        ax.plot(xi, yi, "b-")
+        ax.fill_between(
+            x[idx],
+            (giant_model_rv_sev_mu + giant_model_rv_sev_sigma)[idx],
+            (giant_model_rv_sev_mu - giant_model_rv_sev_sigma)[idx],
+            facecolor="b", alpha=0.3, edgecolor="none")
+
+    axes[0].set_title(r"\textrm{main-sequence stars}")
+    axes[1].set_title(r"\textrm{giant stars}")
+
+    x = sources[label_name][qc]
+    xlims = (np.nanmin(x), np.nanmax(x))
+    for ax in axes:
+        ax.set_xlabel(r"\textrm{{{0}}}".format(description))
+        ax.set_ylabel(r"\textrm{single epoch radial velocity variance} $(\textrm{km}^2\,\textrm{s}^{-2})$")
+        
+        if is_semilogx:
+            ax.semilogx()
+
+        ax.set_xlim(xlims)
+        ax.set_ylim(axes[2].get_ylim())
+
+    fig.tight_layout()
+
+    fig.savefig(
+        "figures/giant-vs-dwarf-{}.pdf".format(label_name.replace("_", "-")),
+        dpi=150)
+
 
 
