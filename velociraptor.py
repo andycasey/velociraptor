@@ -17,7 +17,7 @@ plt.style.use(mpl_utils.mpl_style)
 
 np.random.seed(42)
 
-def load_gaia_sources(path, N=None, **kwargs):
+def load_gaia_sources(path, **kwargs):
     """
     Load a subset of Gaia data and calculate additional properties like
     `absolute_g_mag`, `absolute_bp_mag`, `absolute_rp_mag`, and
@@ -25,9 +25,6 @@ def load_gaia_sources(path, N=None, **kwargs):
 
     :param path:
         The local path to load the sources from.
-
-    :param N: [optional]
-        If not `None`, draw a random `N` sources from the data.
     """
 
     sources = Table.read(path, **kwargs)
@@ -39,15 +36,11 @@ def load_gaia_sources(path, N=None, **kwargs):
 
     sources["rv_single_epoch_variance"] = sources["radial_velocity_error"]**2 \
                                         * sources["rv_nb_transits"] * np.pi/2.0
-
-    if N is not None:
-        S = len(sources)
-        return sources[np.random.choice(S, size=min(int(N), S), replace=False)]
     return sources
 
 
 def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan",
-    **source_params):
+    S=None, **source_params):
     """
     Compile the Stan model, and prepare the data and initialisation dictionaries
     for optimization and sampling.
@@ -61,6 +54,10 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
 
     :param model_path: [optional]
         The local path of the Stan model.
+
+    :param S: [optional]
+        If not `None`, draw a random `S` valid sources from the data rather than
+        using the full data set.
 
     :Keyword Arguments:
         * *source_params* (``dict``) These are passed directly to the
@@ -78,22 +75,26 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     dm = _rvf_design_matrix(**source_params)
     finite = np.all(np.isfinite(dm), axis=0) \
            * np.isfinite(rv_single_epoch_variance)
+    indices = np.where(finite)[0]
+    N = sum(finite)
 
-    if not all(finite):
-        logging.warn("Design matrix contains {0} (of {1}; {2} are finite) "\
-                     "non-finite values! Exlcuding them from model fit."\
-                     .format(sum(~finite), finite.size, sum(finite)))
+    if S is not None:
+        indices = np.random.choice(indices, size=min(N, S), replace=False)
+
+    if (S is not None and S > N) or not all(finite):
+        logger.warn("Excluding non-finite entries in design matrix! "\
+                    "Number of data points: {0}".format(indices.size))
     
-    dm = dm[:, finite]
+    dm = dm[:, indices]
     coeff = _rvf_initial_coefficients(dm, target=target)
 
     init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
-    data = dict(N=sum(finite), rv_variance=rv_single_epoch_variance[finite],
+    data = dict(N=N, rv_variance=rv_single_epoch_variance[indices],
         design_matrix=dm.T, M=dm.shape[0])
 
     model = stan.load_stan_model(model_path)
 
-    return (model, data, init, finite)
+    return (model, data, init, indices)
 
 
 def _rvf_design_matrix(phot_rp_mean_flux, bp_rp, **kwargs):

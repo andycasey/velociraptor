@@ -8,10 +8,9 @@ import velociraptor
 
 # Load the data and make some plots.
 sources = velociraptor.load_gaia_sources("data/rv-all.fits")
+model, data_dict, init_dict, idx = velociraptor.prepare_model(N=1e6, **sources)
 
-model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(**sources)
-
-print("Number of data points: {}".format(sum(used_in_fit)))
+print("Number of data points: {}".format(data_dict["N"]))
 
 p_opt = model.optimizing(data=data_dict, init=init_dict)
 
