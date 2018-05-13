@@ -23,33 +23,29 @@ parameters {
   vector<lower=0>[M] sigma_coefficients;
 }
 
-transformed parameters {
-  real rvf_mu[N];    // RV floor mu
-  real rvf_sigma[N]; // RV floor scatter
-  for (n in 1:N) {
-    rvf_mu[n] = dot_product(design_matrix[n], mu_coefficients);
-    rvf_sigma[n] = dot_product(design_matrix[n], sigma_coefficients);
-  }
-}
-
 model {
   theta ~ beta(1, 5);
   for (n in 1:N)
-    target += log_mix(theta, 
-                      background_uniform_lpdf,
-                      normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]));
+    target += log_mix(
+      theta, 
+      background_uniform_lpdf,
+      normal_lpdf(rv_variance[n] | 
+        dot_product(design_matrix[n], mu_coefficients), 
+        dot_product(design_matrix[n], sigma_coefficients)));
 }
 
 generated quantities {
   real log_ps1;
-  real log_ps2;
   real log_membership_probability[N];
 
   log_ps1 = log(theta) + background_uniform_lpdf;
 
   for (n in 1:N) {
+    real log_ps2;
     log_ps2 = log1m(theta)
-            + normal_lpdf(rv_variance[n] | rvf_mu[n], rvf_sigma[n]);
+            + normal_lpdf(rv_variance[n] | 
+                dot_product(design_matrix[n], mu_coefficients), 
+                dot_product(design_matrix[n], sigma_coefficients));
     log_membership_probability[n] = log_ps1 - log_sum_exp(log_ps1, log_ps2);
   }
 }

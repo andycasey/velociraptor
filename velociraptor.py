@@ -3,7 +3,7 @@
 Code for the velociraptor project.
 """
 
-import logging
+import logging as logger
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table
@@ -79,7 +79,7 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     N = sum(finite)
 
     if S is not None:
-        indices = np.random.choice(indices, size=min(N, S), replace=False)
+        indices = np.random.choice(indices, size=int(min(N, S)), replace=False)
 
     if (S is not None and S > N) or not all(finite):
         logger.warn("Excluding non-finite entries in design matrix! "\
@@ -89,7 +89,7 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     coeff = _rvf_initial_coefficients(dm, target=target)
 
     init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
-    data = dict(N=N, rv_variance=rv_single_epoch_variance[indices],
+    data = dict(N=indices.size, rv_variance=rv_single_epoch_variance[indices],
         design_matrix=dm.T, M=dm.shape[0])
 
     model = stan.load_stan_model(model_path)
@@ -138,14 +138,15 @@ def predict_map_rv_single_epoch_variance(samples, **source_params):
     return (mu, sigma)
 
 
-def binary_probability(samples, **source_params):
+def sb2_probability(samples, **source_params):
     """
-    Calculate the probability of binarity for Gaia sources, based on samples
-    from our MCMC.
+    Calculate a point estimate of the binarity for Gaia sources, based either
+    on an optimized point estimate of the model parameters, or from MCMC samples
+    (where the mean of the parameter traces are used).
     """
 
     max_rv_variance = np.nanmax(source_params["rv_single_epoch_variance"])
-
+    
 
     log_ps1 = np.log(samples["theta"]) - np.log(max_rv_variance)
     log_ps2 = np.log(1 - samples["theta"]) 
