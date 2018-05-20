@@ -2,14 +2,19 @@
 .DS_Store
 __pycache__/
 
+*.pkl
 data/*.fits*
+data/*.csv
 figures/*.pdf
+figures/*.png
 
 *.stan.cached
 
+article/ms.bbl
+article/ms.blg
 article/vc.tex
 article/msNotes.bib
 article/ms.aux
-article/ms.log
+article/*.log
 article/ms.pdf
 article/ms.synctex.gz

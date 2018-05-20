@@ -1,5 +1,6 @@
 \documentclass[twocolumn]{aastex61}
 \usepackage{bm}
+\usepackage{color}
 
 \newcommand\teff{T_{\rm eff}}
 \newcommand\logg{\log{g}}
@@ -7,13 +8,21 @@
 \newcommand\mh{[\rm{M}/\rm{H}]}
 
 \newcommand{\project}[1]{\textsl{#1}}
+\newcommand{\package}[1]{\texttt{#1}}
 \newcommand{\acronym}[1]{{\small{#1}}}
 \newcommand{\Gaia}{\project{Gaia}}
 \newcommand{\gaia}{\project{gaia}}
+\newcommand{\todo}[1]{\textcolor{red}{#1}}
+
+
+\newcommand{\GaiaRVE}{\sigma_{\mathrm{V}_\mathrm{R}}^\mathrm{MTA}}
+\newcommand{\RVJitter}{\sigma(\mathrm{V}_\mathrm{R}^{t})}
 
 \received{2018 XX XX}
 \revised{2018 XX XX}
 \accepted{2018 XX XX}
+
+%\graphicspath{../figures}
 
 %\submitjournal{AAS Journals}
 
@@ -22,7 +31,7 @@
 
 \begin{document}
 
-\title{Stellar multiplicity}
+\title{Stellar multiplicity in \Gaia}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -32,6 +41,10 @@
     Victoria, Australia}
 \affiliation{Faculty of Information Technology, Monash University, Clayton 3800, 
     Victoria, Australia}
+
+%\author{Daniel Foreman-Mackey}
+%\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
+
 
 %\author[0000-0003-2866-9403]{David W. Hogg??}
 %\affiliation{Center for Cosmology and Particle Physics, Department of Physics,
@@ -43,7 +56,18 @@
 %\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
 
 \begin{abstract}
-Velociraptors can't see you if you don't move. (\Gaia can see you if you can.)
+Most stars are in binary systems. 
+The occurrence rate of binary star systems is critically important to many 
+fields of astrophysics, but the effects of binaries are commonly ignored in 
+astronomical data analysis applications.
+Here we construct a model to probabilistically identify binary stars based on
+excess radial velocity scatter, photometry, and astrometric excess noise.
+
+We identify binaries \todo{within some orbital and SP limits} and show that 
+the orbital semi-amplitude is well-approximated by the excess radial velocity
+scatter for systems within these criteria.
+
+\todo{We make a few interesting tests about binarity...}
 \end{abstract}
 
 
@@ -60,7 +84,96 @@ Velociraptors can't see you if you don't move. (\Gaia can see you if you can.)
 \end{itemize}
 
 
-\section{Model}
+\section{Method}
+
+There are at least three ways that binary systems can be reliably
+identified using from \Gaia data: through radial velocity variations, 
+anomalous photometric colours, or excess astrometric noise. In this 
+work we do not make use of astrometric noise because of the 
+degree-of-freedom astrometry bug present in the second \Gaia\ data 
+release \citep{Lindegren:2018}. We will describe the radial velocity
+information that forms part of our model for identifying binary stars,
+and then discuss the photometric information used, before explicitly
+outlining the assumptions of our model.
+
+
+The second \Gaia\ data release provides median radial velocity 
+estimates for 7,224,631 stars. The radial velocity error provided
+($\GaiaRVE$; \texttt{radial\_velocity\_error}) is a function of the 
+number of transits $N$ (i.e., observations; column 
+\texttt{rv\_nb\_transits}) and the scatter among those $N$ measurements. 
+This allows us to calculate the scatter among those measurements, or
+rather the \emph{radial velocity jitter}, for each source
+\begin{eqnarray}
+\RVJitter = \sqrt{\frac{2N}{\pi}}\GaiaRVE \quad .
+\end{eqnarray}
+
+
+
+For a single star system observed $N$ times, the source radial velocity
+jitter represents either the minimum uncertainty with which
+\Gaia\ can measure radial velocity for a star of that apparent 
+brightness and colour. However for stars with stellar companions,
+the radial velocity scatter is a function of orbital parameters 
+and observing epochs. Thus we can reasonably assume that the
+radial velocity jitter will be a mixture of
+two populations: single stars, where the radial velocity jitter
+represents the minimum radial velocity noise that \Gaia\ can
+measure for a star of that type, and a binary population that
+could have radial velocity variances well above the noise floor.
+
+
+
+\begin{figure*}
+	\includegraphics[width=1.0\textwidth]{../figures/sb9-comparison.pdf}
+    \caption{Source radial velocity variance shown with respect to flux in
+    the \Gaia\ BP, G, and RP bands. The source radial velocity variance 
+    most closely follows the RP flux as it is closer to the \Gaia\ RVS
+    band.}
+\end{figure*}
+
+\begin{figure}
+	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+    \caption{Source mean \Gaia\ RP flux and radial velocity variance.
+    Points are represented by their mean $BP-RP$ color, confirming that
+    there is some color dependency on the source radial velocity variance.}
+    \label{fig:rp-flux-color}
+\end{figure}
+
+
+\begin{figure}
+	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+    \caption{Mixture model fitted.}
+    \label{fig:mixture-model}
+\end{figure}
+
+
+
+\begin{figure}
+	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+    \caption{Detected binary fraction as a function of the mean RP flux
+    (top panels), the $BP-RP$ color (second panels), the number of 
+    radial velocity transits (third panels), and the inferred temperature
+    (bottom panels). No trend is observed with mean RP flux or the number 
+    of radial velocity transits. However, our model finds bluer (hotter)
+    stars are more likely to be binaries, despite including color as a
+    dependency in our model.}
+    \label{fig:binary-fraction-wrt-params}
+\end{figure}
+
+
+
+
+
+% we assume what?
+%
+
+% given these assumptions, the model we adopt is XYZ
+% we chose to model in RP flux as it more closely represents the flux counts that would be received by the Gaia RVS, rather than G or BP flux.
+
+% the model we use is
+
+%  
 
 \begin{itemize}
 \item The effect of binaries.
@@ -115,19 +228,43 @@ Velociraptors can't see you if you don't move. (\Gaia can see you if you can.)
 \section{Discussion}
 
 
-
-\software{numpy, scipy, astropy, Stan}
-
 \acknowledgements
-- If these peeps are not co-authors: Hogg, Spina, Schlaufman.
-- Gaia/DPAC
-- Gaia archive?
-- Gaia DR2 hack week at Flatiron
-- ARC DP
 
-%This work has made use of CosmoHub.
+It is a pleasure to thank
+	David W. Hogg,
+	Lorenzo Spina, 
+		and 
+	Kevin C. Schlaufman.
+This work was partly supported through the Australian Research Council 
+through Discovery Grant DP160100637.
+This work has made use of data from the European Space Agency (ESA) mission {\it
+Gaia} (\url{https://www.cosmos.esa.int/gaia}), processed by the {\it Gaia} Data
+Processing and Analysis Consortium (DPAC,
+\url{https://www.cosmos.esa.int/web/gaia/dpac/consortium}). Funding for the DPAC
+has been provided by national institutions, in particular the institutions
+participating in the {\it Gaia} Multilateral Agreement.  This research was
+started at the NYC Gaia DR2 Workshop at the Center for Computational
+Astrophysics of the Flatiron Institute in 2018 April.
 
-%CosmoHub has been developed by the Port d'Informació Científica (PIC), maintained through a collaboration of the Institut de Física d'Altes Energies (IFAE) and the Centro de Investigaciones Energéticas, Medioambientales y Tecnológicas (CIEMAT), and was partially funded by the "Plan Estatal de Investigación Científica y Técnica y de Innovación" program of the Spanish government.
+This work has made use of CosmoHub. CosmoHub has been developed by the Port d'Informaci\'o Cient\'ifica (PIC), maintained through a collaboration of the Institut de F\'isica d'Altes Energies (IFAE) and the Centro de Investigaciones Energ\'eticas, Medioambientales y Tecnol\'ogicas (CIEMAT), and was partially funded by the "Plan Estatal de Investigaci\'on Científica y T\'ecnica y de Innovaci\'on" program of the Spanish government.
+
+
+
+
+\software{
+	\package{Astropy} \citep{astropy},
+    \package{IPython} \citep{ipython},
+    \package{matplotlib} \citep{mpl},
+    \package{numpy} \citep{numpy},
+    \package{scipy} \citep{scipy},
+    \package{Stan} \citep{stan},
+    \package{CosmoHub} \citep{cosmohub}
+    %tensorflow
+}    
+
+\bibliographystyle{aasjournal}
+\bibliography{velociraptor}
+
 
 
 \end{document}
