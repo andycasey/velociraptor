@@ -49,3 +49,23 @@ job = Gaia.launch_job_async("""
     """.format(", ".join(columns)))
 sources = job.get_results()
 sources.write("rv_calibration_floor-result.fits")
+
+
+
+all_possible_sources = Gaia.launch_job_async("""
+    SELECT  *
+    FROM    gaiadr2.gaia_source
+    WHERE   phot_rp_mean_mag < 13
+    """)
+
+
+"""
+SELECT  *
+FROM    gaiadr2.gaia_source
+WHERE   radial_velocity IS NOT NULL
+AND     duplicated_source = 'false'
+AND     rv_nb_transits > 10
+AND     visibility_periods_used > 10
+AND     radial_velocity_error < 20
+AND     mod(random_index, 10) = 0
+"""

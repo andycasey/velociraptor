@@ -9,17 +9,122 @@ import matplotlib.pyplot as plt
 import velociraptor
 
 # Load the data and make some plots.
-sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz", N=1e4)
+sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz")
 
-model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(**sources)
+model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(
+    S=1e4, **sources)
+
+init_dict = dict([
+    ('theta', 0.15167079461165178),
+    #('mu_coefficient', 0.3),
+    #('mu_coefficients', np.array([1e12, 1])),
+    ('mu_coeff_0', 0.3),
+    ('mu_coeff_1', 1e-4)
+    ('mu_coeff_2', 1e12),
+    ('mu_coeff_3', 1),
+    ('mu_coeff_4', 1)
+    #('sigma_coefficients', np.array([0.3, 4e11, 1]))
+    ('sigma_coeff_0', 0.3),
+    ('sigma_coeff_1', 1e-4),
+    ('sigma_coeff_2', 4e11),
+    ('sigma_coeff_3', 1),
+    ('sigma_coeff_4', 1),
+])
+
 
 p_opt = model.optimizing(data=data_dict, init=init_dict)
 
-samples = model.sampling(**velociraptor.stan.sampling_kwds(
-    data=data_dict, chains=2, iter=2000, init=p_opt))
+print(p_opt)
+
+fig, ax = plt.subplots()
+ax.scatter(sources["phot_rp_mean_flux"][used_in_fit], data_dict["rv_variance"],
+    s=1, alpha=0.5, facecolor="k")
+
+x = np.logspace(
+    np.log10(np.nanmin(sources["phot_rp_mean_flux"])),
+    np.log10(np.nanmax(sources["phot_rp_mean_flux"])),
+    1000)
+bp_rp = np.nanmean(sources["bp_rp"]) * np.ones(x.size)
+mu_opt = np.dot(
+    np.hstack([p_opt["mu_coeff_0"], p_opt["mu_coeff_1"], p_opt["mu_coeff_2"], p_opt["mu_coeff_3"], p_opt["mu_coeff_4"]]),
+    velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
+sigma_opt = np.dot(
+    p_opt["sigma_coefficients"],
+    velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
 
 
-fig = velociraptor.plot_model_predictions_corner(samples, sources,
+mu_init = np.dot(
+    np.hstack([init_dict["mu_coeff_0"], init_dict["mu_coeff_1"], init_dict["mu_coeff_2"], p_opt["mu_coeff_3"], p_opt["mu_coeff_4"]]),
+    velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
+
+
+sigma_init = np.dot(
+    np.hstack([init_dict["sigma_coeff_0"], init_dict["sigma_coeff_1"], init_dict["sigma_coeff_2"], p_opt["sigma_coeff_3"], p_opt["sigma_coeff_4"]]),
+    velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
+
+
+
+ax.plot(x, mu_init, c='r')
+ax.fill_between(x, mu_init - sigma_init, mu_init + sigma_init, facecolor="r",
+    alpha=0.3, edgecolor="none")
+
+ax.plot(x, mu_opt, c='b')
+ax.fill_between(x, mu_opt - sigma_opt, mu_opt + sigma_opt, facecolor="b",
+    alpha=0.3, edgecolor="none")
+
+ax.semilogx()
+ax.set_ylim(0, 400)
+
+
+raise a
+
+
+iterations = 2000
+p_samples = model.sampling(**velociraptor.stan.sampling_kwds(
+    data=data_dict, chains=2, iter=iterations, init=init_dict))
+
+print(p_samples)
+
+parameter_names = ("theta", "mu_coeff_0",  "mu_coeff_1", "mu_coeff_2",
+    "mu_coeff_3", "mu_coeff_4", "sigma_coeff_0", "sigma_coeff_1", 
+    "sigma_coeff_2", "sigma_coeff_3", "sigma_coeff_4")
+
+chains = p_samples.extract(parameter_names, permuted=True)
+chains = np.vstack(
+    [chains[pn].reshape((-1, iterations)) for pn in parameter_names]).T
+
+initial = np.hstack([init_dict[pn] for pn in parameter_names])
+
+import corner
+fig = corner.corner(chains, truths=initial)
+
+# Make many draws.
+
+x = np.logspace(
+    np.log10(np.nanmin(sources["phot_rp_mean_flux"])),
+    np.log10(np.nanmax(sources["phot_rp_mean_flux"])),
+    1000)
+bp_rp = np.nanmean(sources["bp_rp"]) * np.ones(x.size)
+dm = velociraptor._rvf_design_matrix(x, bp_rp=bp_rp)
+
+fig, ax = plt.subplots()
+ax.scatter(sources["phot_rp_mean_flux"][used_in_fit], data_dict["rv_variance"],
+    s=1, alpha=0.5, facecolor="#000000")
+
+
+for index in np.random.choice(2000, 100, replace=False):
+    y = np.dot(chains[index][1:4], dm) \
+      + np.random.normal(0, 1) * np.dot(chains[index][4:], dm)
+
+    ax.plot(x, y, "r-", alpha=0.05)
+
+ax.semilogx()
+ax.set_ylim(0, ax.get_ylim()[1])
+
+
+
+"""
+fig = velociraptor.plot_model_predictions_corner(p_samples, sources,
     log_parameters=("phot_rp_mean_flux", ), labels=dict(
         phot_rp_mean_flux=r"\textrm{mean rp flux}",
         bp_rp=r"\textrm{bp-rp}"))
@@ -30,7 +135,85 @@ model_scatter_kwds = dict(s=1, facecolor="r", alpha=0.5, rasterized=True)
 
 
 model_rv_sev_mu, model_rv_sev_sigma = \
-    velociraptor.predict_map_rv_single_epoch_variance(samples, **sources)
+    velociraptor.predict_map_rv_single_epoch_variance(p_samples, **sources)
+"""
+
+# Make a corner plot from our p_samples.
+
+
+N_mu = 3 # p_samples.extract("mu_coefficients")["mu_coefficients"].shape[1]
+N_sigma = 3# p_samples.extract("sigma_coefficients")["sigma_coefficients"].shape[1]
+
+
+
+raise a
+
+y = np.dot(
+    np.median(chains, axis=0)[1:1 + N_mu], 
+    )
+ax.plot(x, y, c='r')
+raise a
+
+
+
+
+labels = (
+    r"$\theta$",
+    r"$\mu_0$",
+    r"$\mu_1$",
+    r"$\mu_2$",
+    r"$\mu_3$",
+    r"$\mu_4$",
+    r"$\mu_5$",
+    r"$\sigma_0$",
+    r"$\sigma_1$",
+    r"$\sigma_2$",
+    r"$\sigma_3$",
+    r"$\sigma_4$",
+    r"$\sigma_5$",
+)
+import corner
+
+fig = corner.corner(chains, labels=labels, truths=initial)
+
+# Calculate SB2 probability distributions for all stars.
+masks = [
+    np.ones(len(chains), dtype=bool)
+]
+"""
+    (chains.T[1] < 10),
+    ((25 >= chains.T[1]) * (chains.T[1] > 15)),
+    ((35 >= chains.T[1]) * (chains.T[1] > 25)),
+    (chains.T[1] > 40)
+]
+"""
+
+x = np.logspace(
+    np.log10(np.nanmin(sources["phot_rp_mean_flux"])),
+    np.log10(np.nanmax(sources["phot_rp_mean_flux"])),
+    1000)
+
+from matplotlib.cm import Set1
+bp_rp = np.nanmean(sources["bp_rp"]) * np.ones(x.size)
+
+fig, ax = plt.subplots()
+ax.semilogx()
+
+for i, mask in enumerate(masks):
+
+    y = np.dot(chains[:, 1:4], velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
+    q = np.percentile(y, [16, 50, 84], axis=0)
+
+    c = Set1(i)
+
+    ax.plot(x, q[1], label="set {}".format(i),
+        alpha=0.5, c=c, lw=2)
+    ax.fill_between(x, q[0], q[2], facecolor=c, alpha=0.3, edgecolor="none")
+
+
+
+
+raise a
 
 # Plot the model against various properties of interest.
 shorthand_parameters = [
@@ -165,7 +348,7 @@ for label_name, description, is_semilogx in shorthand_parameters:
 
 # Plot the binary fraction with different parameters.
 N_bins = 15
-prob_binarity = np.mean(np.exp(samples["log_membership_probability"]), axis=0)
+prob_binarity = np.mean(np.exp(p_samples["log_membership_probability"]), axis=0)
 for label_name, description, is_semilogx in shorthand_parameters:
 
     x = sources[label_name][used_in_fit]

@@ -40,7 +40,7 @@ def load_gaia_sources(path, **kwargs):
 
 
 def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan",
-    S=None, **source_params):
+    S=None, max_rv_variance=None, **source_params):
     """
     Compile the Stan model, and prepare the data and initialisation dictionaries
     for optimization and sampling.
@@ -59,6 +59,10 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
         If not `None`, draw a random `S` valid sources from the data rather than
         using the full data set.
 
+    :param max_rv_variance: [optional]
+        Optionally set a maximum radial velocity variance. Sources with variance
+        larger than this will be excluded.
+
     :Keyword Arguments:
         * *source_params* (``dict``) These are passed directly to the
         `_rvf_design_matrix`, so they should include all of the source labels
@@ -75,6 +79,9 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     dm = _rvf_design_matrix(**source_params)
     finite = np.all(np.isfinite(dm), axis=0) \
            * np.isfinite(rv_single_epoch_variance)
+    if max_rv_variance is not None:
+        finite *= (rv_single_epoch_variance <= max_rv_variance)
+
     indices = np.where(finite)[0]
     N = sum(finite)
 
@@ -84,8 +91,14 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
     if (S is not None and S > N) or not all(finite):
         logger.warn("Excluding non-finite entries in design matrix! "\
                     "Number of data points: {0}".format(indices.size))
-    
+
+
     dm = dm[:, indices]
+
+    #offsets = np.min()
+    #scales = np.ptp(dm, axis=1)
+
+
     coeff = _rvf_initial_coefficients(dm, target=target)
 
     init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
@@ -124,7 +137,7 @@ def predict_map_rv_single_epoch_variance(samples, **source_params):
     """
     Predict the maximum a-posteriori estimate of the radial velocity variance
     from a single epoch.
-    
+
     :param samples:
         The Stan chains from the model.
     """
@@ -134,7 +147,7 @@ def predict_map_rv_single_epoch_variance(samples, **source_params):
     dm = _rvf_design_matrix(**source_params)
     mu = np.dot(np.mean(params["mu_coefficients"], axis=0), dm)
     sigma = np.dot(np.mean(params["sigma_coefficients"], axis=0), dm)
-    
+
     return (mu, sigma)
 
 
@@ -146,10 +159,10 @@ def sb2_probability(samples, **source_params):
     """
 
     max_rv_variance = np.nanmax(source_params["rv_single_epoch_variance"])
-    
+
 
     log_ps1 = np.log(samples["theta"]) - np.log(max_rv_variance)
-    log_ps2 = np.log(1 - samples["theta"]) 
+    log_ps2 = np.log(1 - samples["theta"])
 
     raise NotImplementedError()
 
@@ -160,7 +173,7 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
     """
     Make a corner plot showing the maximum a posteori radial velocity variance
     for different (stellar) properties that contribute to the model.
-    
+
     :param samples:
         The MCMC samples.
 
@@ -213,7 +226,7 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
 
     samples_kwd = kwargs.get("samples_kwd", "mu_coefficients")
     coefficients = np.mean(samples.extract((samples_kwd, ))[samples_kwd], axis=0)
-    
+
     P = len(limits)
 
     # Calculate the expected radial velocity variance for all combinations of
@@ -253,23 +266,23 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
                 ax.fill_between(
                     x_uniques, y_percentiles[0], y_percentiles[2],
                     facecolor="r", alpha=0.3, edgecolor="none")
-                
+
                 if x_param in log_parameters:
                     ax.semilogx()
 
                 ax.set_xlabel(labels.get(x_param, x_param))
                 ax.set_ylabel(r"\textrm{single epoch radial velocity variance}"\
                               r" $(\textrm{km}^2\,\textrm{s}^{-2})$")
-            
+
             else:
                 x, y = grid_combinations[[i, j]]
 
                 #_x = np.log10(x) if x_param in log_parameters else x
                 #_y = np.log10(y) if y_param in log_parameters else y
-                
+
                 imshow_kwds = dict(cmap="Reds", aspect="equal",
                     extent=(np.min(x), np.max(x), np.max(y), np.min(y)))
-                
+
                 if x_param in log_parameters:
                     ax.semilogx()
 
@@ -277,7 +290,7 @@ def plot_model_predictions_corner(samples, sources=None, parameter_limits=None,
                     ax.semilogy()
 
                 ax.imshow(expectation.reshape((N, N)), **imshow_kwds)
-                
+
                 ax.set_xlabel(labels.get(x_param, x_param))
                 ax.set_ylabel(labels.get(y_param, y_param))
 
