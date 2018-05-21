@@ -84,6 +84,8 @@ def plot_histogram_steps(ax, x_bins, y, y_err):
 
     yy = np.array(y).repeat(2)
 
+    #xbc = x_bins[:-1] + 0.5 * np.diff(x_bins)
+
     _ = ax.plot(xx, yy, '-')
     ax.errorbar(x_bins, y, y_err, fmt=None, capsize=0, ecolor=_[0].get_color())
 

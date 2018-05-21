@@ -10,7 +10,7 @@ from scipy.special import logsumexp
 
 # Load the data and make some plots.
 sources = velociraptor.load_gaia_sources("data/rv-all.fits")
-model, data_dict, init_dict, idx = velociraptor.prepare_model(S=1e5, **sources)
+model, data_dict, init_dict, idx = velociraptor.prepare_model(S=1e4, **sources)
 
 print("Number of data points: {}".format(data_dict["N"]))
 

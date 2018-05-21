@@ -5,11 +5,15 @@ Validation of the radial velocity calibration model.
 
 import numpy as np
 import matplotlib.pyplot as plt
+import corner
+import pickle
+from scipy.special import logsumexp
 
 import velociraptor
 
 # Load the data and make some plots.
-sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz")
+data_path = "data/rv-all.fits"
+sources = velociraptor.load_gaia_sources(data_path)
 
 model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(
     S=1e4, **sources)
@@ -65,7 +69,7 @@ ax.semilogx()
 ax.set_ylim(0, 400)
 
 
-iterations = 10000
+iterations = 100
 p_samples = model.sampling(**velociraptor.stan.sampling_kwds(
     data=data_dict, chains=2, iter=iterations, init=p_opt))
 
@@ -77,21 +81,18 @@ label_names = (r"$\theta$", r"$\mu_0$",  r"$\mu_1$", r"$\mu_2$",
     r"$\mu_3$", r"$\mu_4$", r"$\sigma_0$", r"$\sigma_1$", 
     r"$\sigma_2$", r"$\sigma_3$", r"$\sigma_4$")
 
-chains = p_samples.extract(parameter_names, permuted=True)
+chains_dict = p_samples.extract(parameter_names, permuted=True)
 chains = np.hstack([
-    chains["theta"].reshape((iterations, 1)), 
-    chains["mu_coefficients"],
-    chains["sigma_coefficients"]
+    chains_dict["theta"].reshape((iterations, 1)), 
+    chains_dict["mu_coefficients"],
+    chains_dict["sigma_coefficients"]
 ])
 
+"""
 
-initial = np.hstack([init_dict[pn] for pn in parameter_names])
-
-import corner
-fig = corner.corner(chains, truths=initial, labels=label_names)
+fig = corner.corner(chains, labels=label_names)
 
 # Make many draws.
-
 x = np.logspace(
     np.log10(np.nanmin(sources["phot_rp_mean_flux"])),
     np.log10(np.nanmax(sources["phot_rp_mean_flux"])),
@@ -105,73 +106,94 @@ ax.scatter(sources["phot_rp_mean_flux"][used_in_fit], data_dict["rv_variance"],
 
 
 N_mu, N_sigma = 5, 5
-for index in np.random.choice(iterations, 250, replace=False):
+for index in np.random.choice(iterations, min(iterations, 250), replace=False):
     y = np.dot(chains[index][1:1 + N_mu], dm) \
       + np.random.normal(0, 1) * np.dot(chains[index][1 + N_mu:], dm)
-
     ax.plot(x, y, "r-", alpha=0.05)
 
 ax.semilogx()
 ax.set_ylim(0, ax.get_ylim()[1])
 
+"""
+# Calculate probability distributions for binarity for all stars.
+has_rv = np.isfinite(sources["radial_velocity"])
+dm = velociraptor._rvf_design_matrix(**sources[has_rv])
+print("ai")
+
+mu = np.dot(dm.T, chains_dict["mu_coefficients"].T)
+ivar = np.dot(dm.T, chains_dict["sigma_coefficients"].T)**-2
+
+print("a")
+
+log_pb = np.log(chains_dict["theta"]) - np.log(np.max(data_dict["rv_variance"]))
+log_ps = np.log(1 - chains_dict["theta"]) \
+       - 0.5 * np.log(2 * np.pi) + 0.5 * np.log(ivar) \
+       - 0.5 * (sources["rv_single_epoch_variance"][has_rv, np.newaxis] - mu)**2 * ivar
+
+print("b")
+
+log_p_sb = log_pb - logsumexp([log_pb * np.ones_like(log_ps), log_ps], axis=0)
+p_sb = np.exp(log_p_sb)
+
+print("c")
+
+# Calculate quantiles.
+p_sb_16, p_sb_50, p_sb_84 = np.percentile(p_sb, [16, 50, 84], axis=1)
+
+print("d")
+
+# Calculate excess variance.
+rv_max_single_star_variance = np.percentile(
+    np.random.normal(0, 1, size=mu.shape) * ivar**-0.5, 99, axis=1)
+print("e")
+
+rv_excess_variance = np.clip(
+    sources["rv_single_epoch_variance"][has_rv] - rv_max_single_star_variance,
+    0, np.inf)
+print("f")
+
+sources["p_sb_16"] = np.nan * np.ones(len(sources))
+sources["p_sb_50"] = np.nan * np.ones(len(sources))
+sources["p_sb_84"] = np.nan * np.ones(len(sources))
+sources["rv_excess_variance"] = np.nan * np.ones(len(sources))
+
+sources["p_sb_16"][has_rv] = p_sb_16
+sources["p_sb_50"][has_rv] = p_sb_50
+sources["p_sb_84"][has_rv] = p_sb_84
+sources["rv_excess_variance"][has_rv] = rv_excess_variance
+
+
+rv_excess_variance
+print("g")
+
+sources.write(data_path, overwrite=True)
+print("h")
+
+with open("data/binary-pdfs.pkl", "wb") as fp:
+    pickle.dump((sources["source_id"][has_rv], p_sb), fp, -1)
 
 raise a
 
 
+mu = np.dot(dm, _point_estimate("mu_coefficients"))
+ivar = np.dot(dm, _point_estimate("sigma_coefficients"))**-2
+log_ps2 = np.log(1 - _point_estimate("theta")) \
+        - 0.5 * np.log(2 * np.pi) + 0.5 * np.log(ivar) \
+        - 0.5 * (rv_variance - mu)**2 * ivar
+
+log_sb2 = log_ps1 - logsumexp([log_ps1 * np.ones(dm.shape[0]), log_ps2], axis=0)
+sources["p_sb2"] = np.exp(log_sb2)
+
+# Calculate the max of those two probabilities.
+sources["p_sbx"] = np.nanmax([sources["p_sb1"], sources["p_sb2"]], axis=0)
+
+# Calculate the excess variance.
+sources["excess_rv_variance"] = np.max(
+    [rv_variance - mu, np.zeros(rv_variance.size)], axis=0)
+#sources["excess_rv_variance"][~np.isfinite(sources["excess_rv_variance"])] = 0
+sources["excess_rv_sigma"] = sources["excess_rv_variance"]**0.5
 
 
-labels = (
-    r"$\theta$",
-    r"$\mu_0$",
-    r"$\mu_1$",
-    r"$\mu_2$",
-    r"$\mu_3$",
-    r"$\mu_4$",
-    r"$\mu_5$",
-    r"$\sigma_0$",
-    r"$\sigma_1$",
-    r"$\sigma_2$",
-    r"$\sigma_3$",
-    r"$\sigma_4$",
-    r"$\sigma_5$",
-)
-import corner
-
-fig = corner.corner(chains, labels=labels, truths=initial)
-
-# Calculate SB2 probability distributions for all stars.
-masks = [
-    np.ones(len(chains), dtype=bool)
-]
-"""
-    (chains.T[1] < 10),
-    ((25 >= chains.T[1]) * (chains.T[1] > 15)),
-    ((35 >= chains.T[1]) * (chains.T[1] > 25)),
-    (chains.T[1] > 40)
-]
-"""
-
-x = np.logspace(
-    np.log10(np.nanmin(sources["phot_rp_mean_flux"])),
-    np.log10(np.nanmax(sources["phot_rp_mean_flux"])),
-    1000)
-
-from matplotlib.cm import Set1
-bp_rp = np.nanmean(sources["bp_rp"]) * np.ones(x.size)
-
-fig, ax = plt.subplots()
-ax.semilogx()
-
-for i, mask in enumerate(masks):
-
-    y = np.dot(chains[:, 1:4], velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
-    q = np.percentile(y, [16, 50, 84], axis=0)
-
-    c = Set1(i)
-
-    ax.plot(x, q[1], label="set {}".format(i),
-        alpha=0.5, c=c, lw=2)
-    ax.fill_between(x, q[0], q[2], facecolor=c, alpha=0.3, edgecolor="none")
 
 
 
