@@ -14,23 +14,12 @@ sources = velociraptor.load_gaia_sources("data/rv-cal-subset.fits.gz")
 model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(
     S=1e4, **sources)
 
+# This *works*, but you could start from any random position.
 init_dict = dict([
-    ('theta', 0.15167079461165178),
-    #('mu_coefficient', 0.3),
-    #('mu_coefficients', np.array([1e12, 1])),
-    ('mu_coeff_0', 0.3),
-    ('mu_coeff_1', 1e-4)
-    ('mu_coeff_2', 1e12),
-    ('mu_coeff_3', 1),
-    ('mu_coeff_4', 1)
-    #('sigma_coefficients', np.array([0.3, 4e11, 1]))
-    ('sigma_coeff_0', 0.3),
-    ('sigma_coeff_1', 1e-4),
-    ('sigma_coeff_2', 4e11),
-    ('sigma_coeff_3', 1),
-    ('sigma_coeff_4', 1),
+    ('theta', 0.20),
+    ('mu_coefficients', np.array([0.3, 1e-4, 1e12, 1, 1])),
+    ('sigma_coefficients', np.array([0.3, 1e-4, 4e11, 1, 1])),
 ])
-
 
 p_opt = model.optimizing(data=data_dict, init=init_dict)
 
@@ -46,7 +35,7 @@ x = np.logspace(
     1000)
 bp_rp = np.nanmean(sources["bp_rp"]) * np.ones(x.size)
 mu_opt = np.dot(
-    np.hstack([p_opt["mu_coeff_0"], p_opt["mu_coeff_1"], p_opt["mu_coeff_2"], p_opt["mu_coeff_3"], p_opt["mu_coeff_4"]]),
+    p_opt["mu_coefficients"],
     velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
 sigma_opt = np.dot(
     p_opt["sigma_coefficients"],
@@ -54,12 +43,12 @@ sigma_opt = np.dot(
 
 
 mu_init = np.dot(
-    np.hstack([init_dict["mu_coeff_0"], init_dict["mu_coeff_1"], init_dict["mu_coeff_2"], p_opt["mu_coeff_3"], p_opt["mu_coeff_4"]]),
+    init_dict["mu_coefficients"],
     velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
 
 
 sigma_init = np.dot(
-    np.hstack([init_dict["sigma_coeff_0"], init_dict["sigma_coeff_1"], init_dict["sigma_coeff_2"], p_opt["sigma_coeff_3"], p_opt["sigma_coeff_4"]]),
+    init_dict["sigma_coefficients"],
     velociraptor._rvf_design_matrix(x, bp_rp=bp_rp))
 
 
@@ -76,27 +65,30 @@ ax.semilogx()
 ax.set_ylim(0, 400)
 
 
-raise a
-
-
-iterations = 2000
+iterations = 10000
 p_samples = model.sampling(**velociraptor.stan.sampling_kwds(
-    data=data_dict, chains=2, iter=iterations, init=init_dict))
+    data=data_dict, chains=2, iter=iterations, init=p_opt))
 
 print(p_samples)
 
-parameter_names = ("theta", "mu_coeff_0",  "mu_coeff_1", "mu_coeff_2",
-    "mu_coeff_3", "mu_coeff_4", "sigma_coeff_0", "sigma_coeff_1", 
-    "sigma_coeff_2", "sigma_coeff_3", "sigma_coeff_4")
+parameter_names = ("theta", "mu_coefficients", "sigma_coefficients")
+
+label_names = (r"$\theta$", r"$\mu_0$",  r"$\mu_1$", r"$\mu_2$",
+    r"$\mu_3$", r"$\mu_4$", r"$\sigma_0$", r"$\sigma_1$", 
+    r"$\sigma_2$", r"$\sigma_3$", r"$\sigma_4$")
 
 chains = p_samples.extract(parameter_names, permuted=True)
-chains = np.vstack(
-    [chains[pn].reshape((-1, iterations)) for pn in parameter_names]).T
+chains = np.hstack([
+    chains["theta"].reshape((iterations, 1)), 
+    chains["mu_coefficients"],
+    chains["sigma_coefficients"]
+])
+
 
 initial = np.hstack([init_dict[pn] for pn in parameter_names])
 
 import corner
-fig = corner.corner(chains, truths=initial)
+fig = corner.corner(chains, truths=initial, labels=label_names)
 
 # Make many draws.
 
@@ -112,9 +104,10 @@ ax.scatter(sources["phot_rp_mean_flux"][used_in_fit], data_dict["rv_variance"],
     s=1, alpha=0.5, facecolor="#000000")
 
 
-for index in np.random.choice(2000, 100, replace=False):
-    y = np.dot(chains[index][1:4], dm) \
-      + np.random.normal(0, 1) * np.dot(chains[index][4:], dm)
+N_mu, N_sigma = 5, 5
+for index in np.random.choice(iterations, 250, replace=False):
+    y = np.dot(chains[index][1:1 + N_mu], dm) \
+      + np.random.normal(0, 1) * np.dot(chains[index][1 + N_mu:], dm)
 
     ax.plot(x, y, "r-", alpha=0.05)
 
@@ -122,36 +115,6 @@ ax.semilogx()
 ax.set_ylim(0, ax.get_ylim()[1])
 
 
-
-"""
-fig = velociraptor.plot_model_predictions_corner(p_samples, sources,
-    log_parameters=("phot_rp_mean_flux", ), labels=dict(
-        phot_rp_mean_flux=r"\textrm{mean rp flux}",
-        bp_rp=r"\textrm{bp-rp}"))
-fig.savefig("figures/model-predictions.pdf", dpi=150)
-
-scatter_kwds = dict(s=1, facecolor="#000000", alpha=0.5, rasterized=True)
-model_scatter_kwds = dict(s=1, facecolor="r", alpha=0.5, rasterized=True)
-
-
-model_rv_sev_mu, model_rv_sev_sigma = \
-    velociraptor.predict_map_rv_single_epoch_variance(p_samples, **sources)
-"""
-
-# Make a corner plot from our p_samples.
-
-
-N_mu = 3 # p_samples.extract("mu_coefficients")["mu_coefficients"].shape[1]
-N_sigma = 3# p_samples.extract("sigma_coefficients")["sigma_coefficients"].shape[1]
-
-
-
-raise a
-
-y = np.dot(
-    np.median(chains, axis=0)[1:1 + N_mu], 
-    )
-ax.plot(x, y, c='r')
 raise a
 
 
