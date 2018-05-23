@@ -69,7 +69,7 @@ ax.semilogx()
 ax.set_ylim(0, 400)
 
 
-iterations = 100
+iterations = 2000
 p_samples = model.sampling(**velociraptor.stan.sampling_kwds(
     data=data_dict, chains=2, iter=iterations, init=p_opt))
 
@@ -115,83 +115,55 @@ ax.semilogx()
 ax.set_ylim(0, ax.get_ylim()[1])
 
 """
-# Calculate probability distributions for binarity for all stars.
+
+# Calculate point estimates of binary probability for all stars.
 has_rv = np.isfinite(sources["radial_velocity"])
-dm = velociraptor._rvf_design_matrix(**sources[has_rv])
-print("ai")
+J = sum(has_rv)
 
-mu = np.dot(dm.T, chains_dict["mu_coefficients"].T)
-ivar = np.dot(dm.T, chains_dict["sigma_coefficients"].T)**-2
-
-print("a")
-
-log_pb = np.log(chains_dict["theta"]) - np.log(np.max(data_dict["rv_variance"]))
-log_ps = np.log(1 - chains_dict["theta"]) \
-       - 0.5 * np.log(2 * np.pi) + 0.5 * np.log(ivar) \
-       - 0.5 * (sources["rv_single_epoch_variance"][has_rv, np.newaxis] - mu)**2 * ivar
-
-print("b")
-
-log_p_sb = log_pb - logsumexp([log_pb * np.ones_like(log_ps), log_ps], axis=0)
-p_sb = np.exp(log_p_sb)
-
-print("c")
-
-# Calculate quantiles.
-p_sb_16, p_sb_50, p_sb_84 = np.percentile(p_sb, [16, 50, 84], axis=1)
-
-print("d")
-
-# Calculate excess variance.
-rv_max_single_star_variance = np.percentile(
-    np.random.normal(0, 1, size=mu.shape) * ivar**-0.5, 99, axis=1)
-print("e")
-
-rv_excess_variance = np.clip(
-    sources["rv_single_epoch_variance"][has_rv] - rv_max_single_star_variance,
-    0, np.inf)
-print("f")
-
-sources["p_sb_16"] = np.nan * np.ones(len(sources))
-sources["p_sb_50"] = np.nan * np.ones(len(sources))
-sources["p_sb_84"] = np.nan * np.ones(len(sources))
+percentiles = [16, 50, 84]
+for p in percentiles:
+    sources["p_sb_{:.0f}".format(p)] = np.nan * np.ones(len(sources))
 sources["rv_excess_variance"] = np.nan * np.ones(len(sources))
 
-sources["p_sb_16"][has_rv] = p_sb_16
-sources["p_sb_50"][has_rv] = p_sb_50
-sources["p_sb_84"][has_rv] = p_sb_84
-sources["rv_excess_variance"][has_rv] = rv_excess_variance
 
+for j, index in enumerate(np.where(has_rv)[0]):
 
-rv_excess_variance
-print("g")
+    print(j, J)
+
+    dm = velociraptor._rvf_design_matrix(**sources[[index]])
+
+    mu = np.dot(dm.T, chains_dict["mu_coefficients"].T)
+    ivar = np.dot(dm.T, chains_dict["sigma_coefficients"].T)**-2
+
+    log_pb = np.log(chains_dict["theta"]) - np.log(np.max(data_dict["rv_variance"]))
+    log_ps = np.log(1 - chains_dict["theta"]) \
+           - 0.5 * np.log(2 * np.pi) + 0.5 * np.log(ivar) \
+           - 0.5 * (sources["rv_single_epoch_variance"][index, np.newaxis] - mu)**2 * ivar
+
+    log_p_sb = log_pb - logsumexp([log_pb * np.ones_like(log_ps), log_ps], axis=0)
+    p_sb = np.exp(log_p_sb).flatten()
+
+    for p, v in zip(percentiles, np.percentile(p_sb, percentiles)):
+        sources["p_sb_{:.0f}".format(p)][index] = v
+
+    # Calculate excess variance.
+    rv_max_single_star_variance = np.percentile(
+        np.random.normal(0, 1, size=mu.shape) * ivar**-0.5, 99, axis=1)
+
+    rv_excess_variance = np.clip(
+        sources["rv_single_epoch_variance"][index] - rv_max_single_star_variance,
+        0, np.inf)
+
+    sources["rv_excess_variance"][index] = rv_excess_variance
+
+    # TODO: Save the PDFs?
+
 
 sources.write(data_path, overwrite=True)
-print("h")
-
-with open("data/binary-pdfs.pkl", "wb") as fp:
-    pickle.dump((sources["source_id"][has_rv], p_sb), fp, -1)
-
-raise a
 
 
-mu = np.dot(dm, _point_estimate("mu_coefficients"))
-ivar = np.dot(dm, _point_estimate("sigma_coefficients"))**-2
-log_ps2 = np.log(1 - _point_estimate("theta")) \
-        - 0.5 * np.log(2 * np.pi) + 0.5 * np.log(ivar) \
-        - 0.5 * (rv_variance - mu)**2 * ivar
-
-log_sb2 = log_ps1 - logsumexp([log_ps1 * np.ones(dm.shape[0]), log_ps2], axis=0)
-sources["p_sb2"] = np.exp(log_sb2)
-
-# Calculate the max of those two probabilities.
-sources["p_sbx"] = np.nanmax([sources["p_sb1"], sources["p_sb2"]], axis=0)
-
-# Calculate the excess variance.
-sources["excess_rv_variance"] = np.max(
-    [rv_variance - mu, np.zeros(rv_variance.size)], axis=0)
-#sources["excess_rv_variance"][~np.isfinite(sources["excess_rv_variance"])] = 0
-sources["excess_rv_sigma"] = sources["excess_rv_variance"]**0.5
+#with open("data/binary-pdfs.pkl", "wb") as fp:
+#    pickle.dump((sources["source_id"][has_rv], p_sb), fp, -1)
 
 
 
