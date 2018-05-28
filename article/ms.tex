@@ -40,7 +40,7 @@
 
 \begin{document}
 
-\title{Stellar multiplicity in \Gaia}
+\title{Detection of millions of stellar binaries using \Gaia\ data}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -54,8 +54,7 @@
 \author{Daniel Foreman-Mackey}
 \affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
 
-
-%\author[0000-0003-2866-9403]{David W. Hogg??}
+%\author[0000-0003-2866-9403]{David W. Hogg}
 %\affiliation{Center for Cosmology and Particle Physics, Department of Physics,
 %    New York University, 726 Broadway, New York, NY 10003, USA}
 %\affiliation{Center for Data Science, New York University, 60 Fifth Ave, 
@@ -88,11 +87,12 @@ metallicity}. \todo{We comment on systems with stellar remnants (e.g. NS/BHs).}
 
 
 \begin{itemize}
-\item the binary fraciton is important
+\item the binary fraction is important
 \item Gaia provides exquisite astrometry and RV measurements over many years
 \item The errors in these quantities are well-characterised
 \item When a star is in a binary system (or triary, etc), there will be excess scatter relative to a single star of the primary's properties
 \item the excess RV noise (and in DR1 or DR3, excess astrometric noise) can be used to infer the presence of a companion
+\item here we do that for lots of sources
 \end{itemize}
 
 
@@ -100,6 +100,7 @@ metallicity}. \todo{We comment on systems with stellar remnants (e.g. NS/BHs).}
 
 There are many ways that binaries can be reliably identified using \Gaia\
 data, including radial velocity measurements, photometry, and astrometry.
+These methods are sensitive to binary systems with different properties.
 Here we describe the radial velocity information that forms part of our 
 model before describing how photometry and astrometry are incorporated into our
 model.
@@ -218,12 +219,23 @@ parameter range
 \noindent{}is likely to be a double-lined spectroscopic binary (SB2) if no 
 radial velocity is reported. 
 
-
-
+We caution that this deductive inference is potentially far more uncertain (or
+contaminated) than the binary probabilities we calculate from the radial
+velocity jitter, astrometric excess noise, and photometric colours. Here we are
+explicitly assuming that if a source is bright enough and within the right 
+colour range, then a radial velocity would be provided \emph{unless} the source
+is a spectroscopic binary. In Section \ref{sec:discussion} we detail some of the
+immediate limitations or interpretations of this assumption, but here we simply
+note that the probability of a source being a double-lined spectroscopic binary
+is calculated (or rather, deduced) separately to our calculations of binarity
+probability given \emph{measured} quantities like radial velocity, astrometry,
+and photometric colours.
 
 \begin{itemize}
     \item completeness
     \item cross-check against SB catalogues -- does it match expectations?
+    \item what about close to the plane? 
+    \item when and why is this bad?
 \end{itemize}
 
 
@@ -295,32 +307,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 
 
-% we assume what?
-%
-
-% given these assumptions, the model we adopt is XYZ
-% we chose to model in RP flux as it more closely represents the flux counts that would be received by the Gaia RVS, rather than G or BP flux.
-
-% the model we use is
-
-%  
-
 \begin{itemize}
-\item The effect of binaries.
-
-\item RV noise vs astrometric excess noise.
-
-\item When would we expect to see astrometric noise and not RV noise, and vice-versa? in what situations?
-
-\item Here we base our model using RV data only from Gaia DR2.
-
-\item Some fraction of stars in Gaia are single star systems (or have such low semi-amplitudes that would not be detected by Gaia), and we will use those stars (within a mixture model) to calibrate the radial velocity error floor
-
-\item We will do this on individual epoch measurements
-
-\item ASSUMPTIONS
-
-\item MODEL
 
 \item CALIBRATION SAMPLE (including ADQL query)
 
@@ -340,6 +327,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 \section{Results}
 
+
 \begin{itemize}
 
 \item Binary fraction in the spaces that we were fitting: rp flux, colour, etc, just showing the transition of  probabilities
@@ -349,18 +337,32 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 \item Binarity across the H-R diagram
 
 \item Binarity with metallicity 
-
-\item Binarity at height above the plane?
-
-\item Binarity in clusters vs the plane?
 \end{itemize}
 
 \section{Discussion}
+
+\subsection{Comparison with \citet{El_Badry:2017,El_Badry:2018}}
+
+\subsection{Comparison with \citet{Badenes:2017}}
+
+\subsection{Comparison with \citet{Raghavan:2010}}
+
+\subsection{Comparison with \citet{Troup:2010}}
+
+\subsection{Comparison with \citet{Price-Whelan:2010}}
+
+\begin{itemize}
+    \item \todo{binarity with metallicity}
+    \item \todo{binarity across the H-R diagram}
+    \item \todo{binarity in clusters vs the field?}
+    \item \todo{binarity among extremely metal-poor stars?}
+\end{itemize}
 
 
 \acknowledgements
 
 It is a pleasure to thank
+    Adrian Price-Whelan,
 	David W. Hogg,
 	Lorenzo Spina, 
 		and 
@@ -376,7 +378,12 @@ participating in the {\it Gaia} Multilateral Agreement.  This research was
 started at the NYC Gaia DR2 Workshop at the Center for Computational
 Astrophysics of the Flatiron Institute in 2018 April.
 
-This work has made use of CosmoHub. CosmoHub has been developed by the Port d'Informaci\'o Cient\'ifica (PIC), maintained through a collaboration of the Institut de F\'isica d'Altes Energies (IFAE) and the Centro de Investigaciones Energ\'eticas, Medioambientales y Tecnol\'ogicas (CIEMAT), and was partially funded by the "Plan Estatal de Investigaci\'on Científica y T\'ecnica y de Innovaci\'on" program of the Spanish government.
+This work has made use of CosmoHub. CosmoHub has been developed by the Port 
+d'Informaci\'o Cient\'ifica (PIC), maintained through a collaboration of the 
+Institut de F\'isica d'Altes Energies (IFAE) and the Centro de Investigaciones 
+Energ\'eticas, Medioambientales y Tecnol\'ogicas (CIEMAT), and was partially 
+funded by the ``Plan Estatal de Investigaci\'on Científica y T\'ecnica y de 
+Innovaci\'on'' program of the Spanish government.
 
 
 
