@@ -6,6 +6,9 @@
 \newcommand\logg{\log{g}}
 \newcommand\feh{[\rm{Fe}/\rm{H}]}
 \newcommand\mh{[\rm{M}/\rm{H}]}
+\newcommand{\luminosity}{L_\circ}
+\newcommand{\radius}{R_\circ}
+
 
 \newcommand{\project}[1]{\textsl{#1}}
 \newcommand{\package}[1]{\texttt{#1}}
@@ -13,6 +16,12 @@
 \newcommand{\Gaia}{\project{Gaia}}
 \newcommand{\gaia}{\project{gaia}}
 \newcommand{\todo}[1]{\textcolor{red}{#1}}
+\newcommand{\rp}{\textsl{rp}}
+\newcommand{\bp}{\textsl{bp}}
+
+
+\newcommand{\NumberOfHigherOrderSystems}{XXX}
+\newcommand{\NumberOfSingleLinedSystems}{XXX}
 
 
 \newcommand{\GaiaRVE}{\sigma_{\mathrm{V}_\mathrm{R}}^\mathrm{MTA}}
@@ -24,10 +33,10 @@
 
 %\graphicspath{../figures}
 
-%\submitjournal{AAS Journals}
+\submitjournal{AAS Journals}
 
 \shorttitle{Stellar multiplicity}
-\shortauthors{Casey et al.?}
+\shortauthors{Casey et al.}
 
 \begin{document}
 
@@ -42,8 +51,8 @@
 \affiliation{Faculty of Information Technology, Monash University, Clayton 3800, 
     Victoria, Australia}
 
-%\author{Daniel Foreman-Mackey}
-%\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
+\author{Daniel Foreman-Mackey}
+\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
 
 
 %\author[0000-0003-2866-9403]{David W. Hogg??}
@@ -56,24 +65,27 @@
 %\affiliation{Flatiron Institute, 162 Fifth Ave, New York, NY 10010, USA}
 
 \begin{abstract}
-Most stars are in binary systems. 
-The occurrence rate of binary star systems is critically important to many 
-fields of astrophysics, but the effects of binaries are commonly ignored in 
-astronomical data analysis applications.
-Here we construct a model to probabilistically identify binary stars based on
-excess radial velocity scatter, photometry, and astrometric excess noise.
-
-We identify binaries \todo{within some orbital and SP limits} and show that 
-the orbital semi-amplitude is well-approximated by the excess radial velocity
-scatter for systems within these criteria.
-
-\todo{We make a few interesting tests about binarity...}
+Most stars are in binary systems. The occurrence rate of multiple order systems 
+(e.g., binaries, triples) is relevant to many fields of astrophysics, but the 
+effects of stellar multiplicity are commonly ignored in the analysis of most 
+stellar and galactic surveys. Here we use \Gaia\ data to identify 
+\todo{\NumberOfHigherOrderSystems} higher-order (e.g., binary) systems based on
+radial velocity or astrometric jitter, photometry, and for a subset of systems, 
+we show that the \emph{lack} of reported radial velocities can be a reliable 
+indicator of double-lined spectroscopic binary systems. Our sample includes
+\todo{\NumberOfSingleLinedSystems} unresolved binary systems detected solely
+from radial velocity or astrometric jitter, which have orbital periods up to 
+$\approx$3.5\,yrs. We show that the ratio of jitter in radial velocity and
+astrometry can be calibrated to estimate inclination angles (and companion masses)
+for thousands of systems. \todo{We comment on stellar multiplicity with stellar
+metallicity}. \todo{We comment on systems with stellar remnants (e.g. NS/BHs).}
 \end{abstract}
 
 
 \keywords{stars: dynamics}
 
 \section{Introduction} \label{sec:intro}
+
 
 \begin{itemize}
 \item the binary fraciton is important
@@ -86,24 +98,22 @@ scatter for systems within these criteria.
 
 \section{Method}
 
-There are at least three ways that binary systems can be reliably
-identified using from \Gaia data: through radial velocity variations, 
-anomalous photometric colours, or excess astrometric noise. In this 
-work we do not make use of astrometric noise because of the 
-degree-of-freedom astrometry bug present in the second \Gaia\ data 
-release \citep{Lindegren:2018}. We will describe the radial velocity
-information that forms part of our model for identifying binary stars,
-and then discuss the photometric information used, before explicitly
-outlining the assumptions of our model.
+There are many ways that binaries can be reliably identified using \Gaia\
+data, including radial velocity measurements, photometry, and astrometry.
+Here we describe the radial velocity information that forms part of our 
+model before describing how photometry and astrometry are incorporated into our
+model.
 
+\subsection{SB1 Systems: Single-lined spectroscopic binaries}
 
-The second \Gaia\ data release provides median radial velocity 
-estimates for 7,224,631 stars. The radial velocity error provided
-($\GaiaRVE$; \texttt{radial\_velocity\_error}) is a function of the 
-number of transits $N$ (i.e., observations; column 
-\texttt{rv\_nb\_transits}) and the scatter among those $N$ measurements. 
-This allows us to calculate the scatter among those measurements, or
-rather the \emph{radial velocity jitter}, for each source
+Radial velocity measurements are not available for individual epochs in the 
+second \Gaia\ data release, but the median and error of radial velocity
+measurements are available for 7,224,631 point sources \cite{gaia_rvs}. 
+The radial velocity error provided ($\GaiaRVE$; column \texttt{radial\_velocity\_error}) 
+is a function of the number of transits $N$ (i.e., the number of observations; 
+represented by column \texttt{rv\_nb\_transits}) and the scatter among those $N$ measurements. 
+This allows us to calculate the scatter among those measurements, which we will
+refer to as the \emph{radial velocity jitter}, for each source
 \begin{eqnarray}
 \RVJitter = \sqrt{\frac{2N}{\pi}}\GaiaRVE \quad .
 \end{eqnarray}
@@ -111,16 +121,136 @@ rather the \emph{radial velocity jitter}, for each source
 
 
 For a single star system observed $N$ times, the source radial velocity
-jitter represents either the minimum uncertainty with which
-\Gaia\ can measure radial velocity for a star of that apparent 
-brightness and colour. However for stars with stellar companions,
-the radial velocity scatter is a function of orbital parameters 
-and observing epochs. Thus we can reasonably assume that the
-radial velocity jitter will be a mixture of
-two populations: single stars, where the radial velocity jitter
-represents the minimum radial velocity noise that \Gaia\ can
-measure for a star of that type, and a binary population that
-could have radial velocity variances well above the noise floor.
+jitter represents either the minimum uncertainty with which \Gaia\ can measure 
+radial velocity for a star of that apparent brightness and colour. However for 
+stars with stellar companions and no evidence of double lines or binarity in the
+cross-correlation-function, so-called SB1 type systems \citep{someone}, the
+radial velocity jitter is a function of the orbital parameters and observing
+epochs. We assume that the distribution of radial velocity jitter in the second
+\Gaia\ data release is a mixture of two populations:
+
+\begin{enumerate}
+\item \emph{single-star systems}, where the radial velocity jitter represents the
+      minimum radial velocity noise that \Gaia\ can measure for a star of that
+      apparent magnitude and colour; and
+
+\item \emph{higher-order star systems}, where the radial velocity jitter is
+      significantly above that for single-star systems of a similar apparent
+      magnitude and colour.
+\end{enumerate}
+
+We make a number of other explicit assumptions about the radial velocity
+measurements reported by \Gaia:
+
+\begin{enumerate}
+    \item the RV error is or is not a function of colour
+    \item the template used for RV determination does or does not affect the 
+          error floor
+    \item the jitter in radial velocity measurements for a single star will
+          increase as a function of apparent flux, etc.
+    \item the spread in the jitter will also increase as a function of these
+          properties
+\end{enumerate}
+
+Given these assumptions, the model we adopt for the radial velocity jitter is
+\begin{eqnarray}
+    MODEL
+\end{eqnarray}
+
+\noindent{}where \todo{X is Y} abd .
+
+In principle for well-sampled circular orbits this model would allow us to
+identify binary star systems with orbital periods up to twice the observing
+span in the second \Gaia\ data release ($\approx$21 months observing span; 
+$\approx$44 month orbital periods). For higher-order star systems with long 
+periods, or with mass ratios that result in a small velocity semi-amplitude $K$, 
+under our assumptions these systems may be classified as single-star systems 
+because the intrinsic radial velocity variation is within the expected 
+variations for single-stars of a similar apparent magnitude and colour. We 
+revisit this issue in Section \ref{sec:sb_limits}, where we explicitly define 
+the probability that a \Gaia\ source is a higher-order star system $p(y|\textrm{SB1})$ 
+within defined limits of orbital period (and other orbital parameters). Outside of this
+parameter range, we are insensitive to distinguishing single-star systems from
+higher-order SB1-type systems.
+
+\begin{itemize}
+    \item show jitter compared to RP flux, etc
+    \item how the model was fit
+    \item show results of the fit
+    \item what things did we \emph{not} include in the model (eg difference between temperature and the temperature of the template used), and why
+    \item results
+\end{itemize}
+
+
+
+\subsection{SB2 Systems: Double-lined spectroscopic binaries}
+
+Many sources in the second \Gaia\ data release do not have any radial velocity
+measurements reported, despite being bright enough ($G \lesssim 13$) and in a
+suitable temperature range for radial velocities to be measured. The principle
+reason why radial velocity measurements are \emph{not} reported for these stars
+is because the \Gaia/DPAC team have identified the source to be a double-lined
+spectroscopic binary (a SB2-type system), in which case it is not sensible to 
+report a single radial velocity measurement. For fainter or bluer sources, 
+however, the radial velocity may not be reported simply because it is too faint, 
+blue, or red. 
+
+
+We calculated the completeness of radial velocity measurements (e.g., the
+fraction of sources with reported radial velocities) as a function of all 
+available source properties that might affect whether the radial velocity may
+be reported or not. This included position ($\alpha$, $\delta$, $l$, $b$),
+parallax, proper motions, apparent magnitudes, colours, properties of the radial
+velocity templates, stellar parameters ($\teff$, $\radius$, $\luminosity$),
+and other properties. The full list of properties investigated is described in
+Appendix \todo{X}. In Figure \ref{fig:radial_velocty_completeness} we show the
+completeness as a function of just some of these properties, which demonstrate 
+that the radial velocity completeness is relatively flat until a star becomes 
+too faint (low \rp\ flux), or is either too blue or too red. We adopt 
+conservative limits for when the radial velocity completeness starts to drop 
+with these properties, and we assume that any source within the following
+parameter range
+
+\begin{eqnarray}
+    \todo{X} =& \textrm{phot rp mean flux}  = &\todo{X} \\
+    \todo{X} =& \textrm{bp}-\textrm{rp}    = &\todo{X}
+\end{eqnarray}
+\noindent{}is likely to be a double-lined spectroscopic binary (SB2) if no 
+radial velocity is reported. 
+
+
+
+
+\begin{itemize}
+    \item completeness
+    \item cross-check against SB catalogues -- does it match expectations?
+\end{itemize}
+
+
+\subsection{Unresolved equal mass binaries: photometry}
+
+
+
+\subsection{Astrometric binaries}
+
+Many higher-order star systems are unresolved point sources in \Gaia, but the
+stellar companion(s) have sufficient mass to measurably affect the tangential 
+velocity of the primary and produce a jitter in astrometric positions. There are
+many other sources of astrometric jitter, but here we show that the principle
+effect of astrometric excess noise is due to stellar companions. Note that due
+to the astrometry `degree of freedom bug' in the processing of the second \Gaia\
+data release \citep[e.g., see Appendix A1 of ][]{Lindegren:2018}, we only make
+use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
+\citep{Michalik, TGAS, etc}. 
+
+
+
+\begin{itemize}
+    \item when would we expect AEN? what stellar or orbital properties does it 
+          correlate or grow with?
+    \item calibration model for AEN in DR1
+\end{itemize}
+
 
 
 
