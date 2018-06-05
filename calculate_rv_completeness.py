@@ -41,13 +41,10 @@ label_names = (
  'astrometric_matched_observations',
  'visibility_periods_used',
  'astrometric_sigma5d_max',
- 'phot_g_n_obs',
  'phot_g_mean_flux',
  'phot_g_mean_mag',
- 'phot_bp_n_obs',
  'phot_bp_mean_flux',
  'phot_bp_mean_mag',
- 'phot_rp_n_obs',
  'phot_rp_mean_flux',
  'phot_rp_mean_mag',
  'phot_bp_rp_excess_factor',
@@ -56,18 +53,15 @@ label_names = (
  'g_rp',
  'radial_velocity',
  'radial_velocity_error',
- 'rv_nb_transits',
  'rv_template_teff',
  'rv_template_logg',
  'rv_template_fe_h',
- 'phot_variable_flag',
  'l',
  'b',
  'ecl_lon',
  'ecl_lat',
  'teff_val',
  'a_g_val',
- 'e_bp_min_rp_val',
  'radius_val',
  'lum_val'
 )
@@ -139,4 +133,7 @@ for label_name in label_names:
     completeness["completeness"][label_name]["x"] = plot_x
     completeness["completeness"][label_name]["y"] = plot_y
     completeness["completeness"][label_name]["yerr"] = plot_y_err
+
+    with open("rv_completeness.pkl", "wb") as fp:
+        pickle.dump(completeness, fp, -1)
 

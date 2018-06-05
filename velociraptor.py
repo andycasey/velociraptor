@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 from matplotlib.ticker import MaxNLocator
 from scipy.stats import norm
+from astropy.io import fits
 
 import stan_utils as stan
 import mpl_utils
@@ -27,6 +28,10 @@ def load_gaia_sources(path, **kwargs):
         The local path to load the sources from.
     """
 
+    #try:
+    #    sources = Table(fits.open(path)[1].data)
+
+    #except:
     sources = Table.read(path, **kwargs)
 
     for band in ("g", "bp", "rp"):
@@ -36,11 +41,31 @@ def load_gaia_sources(path, **kwargs):
 
     sources["rv_single_epoch_variance"] = sources["radial_velocity_error"]**2 \
                                         * sources["rv_nb_transits"] * np.pi/2.0
+
+    # Approximate temperature from bp-rp colour
+    
+    use_in_fit = np.isfinite(sources["radial_velocity"]) \
+               * (sources["phot_bp_rp_excess_factor"] < 1.5) \
+               * np.isfinite(sources["bp_rp"]) \
+               * np.isfinite(sources["teff_val"]) \
+               * (sources["bp_rp"] < 2.5) \
+               * (sources["bp_rp"] > 0.5)
+
+    x = sources["bp_rp"][use_in_fit]
+    y = sources["teff_val"][use_in_fit]
+
+    coeff = np.polyfit(1.0/x, y, 2)
+
+    sources["approx_teff_from_bp_rp"] = np.clip(
+        np.polyval(coeff, 1.0/sources["bp_rp"]),
+        3500, 8000)
+
     return sources
 
 
 def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan",
-    S=None, max_rv_variance=None, **source_params):
+    S=None, design_matrix_function=None, mask=None,
+    **source_params):
     """
     Compile the Stan model, and prepare the data and initialisation dictionaries
     for optimization and sampling.
@@ -59,9 +84,6 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
         If not `None`, draw a random `S` valid sources from the data rather than
         using the full data set.
 
-    :param max_rv_variance: [optional]
-        Optionally set a maximum radial velocity variance. Sources with variance
-        larger than this will be excluded.
 
     :Keyword Arguments:
         * *source_params* (``dict``) These are passed directly to the
@@ -76,12 +98,31 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
         construct the data dictionary.
     """
 
-    dm = _rvf_design_matrix(**source_params)
+    data, indices = prepare_data(rv_single_epoch_variance, S=S, mask=mask,
+                                 design_matrix_function=design_matrix_function,
+                                 **source_params)
+    coeff = _rvf_initial_coefficients(data["design_matrix"].T, target=target)
+
+    init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
+
+    model = stan.load_stan_model(model_path)
+
+    return (model, data, init, indices)
+
+
+
+def prepare_data(rv_single_epoch_variance, S=None, mask=None,
+                 design_matrix_function=None, **source_params):
+
+    if design_matrix_function is None:
+        design_matrix_function = _rvf_design_matrix
+
+    dm = design_matrix_function(**source_params)
     finite = np.all(np.isfinite(dm), axis=0) \
            * np.isfinite(rv_single_epoch_variance)
-    if max_rv_variance is not None:
-        finite *= (rv_single_epoch_variance <= max_rv_variance)
-
+    if mask is not None:
+        finite *= mask
+        
     indices = np.where(finite)[0]
     N = sum(finite)
 
@@ -92,22 +133,12 @@ def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan"
         logger.warn("Excluding non-finite entries in design matrix! "\
                     "Number of data points: {0}".format(indices.size))
 
-
     dm = dm[:, indices]
 
-    #offsets = np.min()
-    #scales = np.ptp(dm, axis=1)
-
-
-    coeff = _rvf_initial_coefficients(dm, target=target)
-
-    init = dict(theta=0.1, mu_coefficients=coeff, sigma_coefficients=coeff)
     data = dict(N=indices.size, rv_variance=rv_single_epoch_variance[indices],
         design_matrix=dm.T, M=dm.shape[0])
 
-    model = stan.load_stan_model(model_path)
-
-    return (model, data, init, indices)
+    return data, indices
 
 
 def _rvf_design_matrix(phot_rp_mean_flux, bp_rp, **kwargs):
@@ -150,21 +181,6 @@ def predict_map_rv_single_epoch_variance(samples, **source_params):
 
     return (mu, sigma)
 
-
-def sb2_probability(samples, **source_params):
-    """
-    Calculate a point estimate of the binarity for Gaia sources, based either
-    on an optimized point estimate of the model parameters, or from MCMC samples
-    (where the mean of the parameter traces are used).
-    """
-
-    max_rv_variance = np.nanmax(source_params["rv_single_epoch_variance"])
-
-
-    log_ps1 = np.log(samples["theta"]) - np.log(max_rv_variance)
-    log_ps2 = np.log(1 - samples["theta"])
-
-    raise NotImplementedError()
 
 
 

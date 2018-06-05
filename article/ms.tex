@@ -39,7 +39,7 @@
 
 \begin{document}
 
-\title{Detection and characterisation of stellar multiplicity from \Gaia\ data}
+\title{Detection and characterisation of stellar multiplicity with \Gaia}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -68,7 +68,7 @@
 			 162 Fifth Ave, New York, NY 10010, USA}
 
 \begin{abstract}
-Most stars are in binary systems. The occurrence rate and properties of stellar 
+Most stars have stellar companions. The occurrence rate and properties of stellar 
 multiples (e.g., binaries, triples) is relevant to many fields of astrophysics, 
 but the effects of stellar multiplicity are commonly ignored in the analysis of 
 most stellar and galactic surveys. Here we use \Gaia\ data to identify 
@@ -199,26 +199,34 @@ account for stellar multiples. Specifically, the likelihood is
 \noindent{}where \todo{X is Y} abd .
 
 In principle for well-sampled circular orbits this model would allow us to
-identify binary star systems with orbital periods up to twice the observing
+identify binary star systems with orbital periods at least up to twice the observing
 span in the second \Gaia\ data release ($\approx$21 months observing span; 
-$\approx$44 month orbital periods). For higher-order star systems with long 
-periods, or with mass ratios that result in a small velocity semi-amplitude $K$, 
-under our assumptions these systems may be classified as single-star systems 
-because the intrinsic radial velocity variation is within the expected 
-variations for single-stars of a similar apparent magnitude and colour. We 
-revisit this issue in Section \ref{sec:sb_limits}, where we explicitly define 
-the probability that a \Gaia\ source is a higher-order star system $p(y|\textrm{SB1})$ 
-within defined limits of orbital period (and other orbital parameters). Outside of this
-parameter range, we are insensitive to distinguishing single-star systems from
-higher-order SB1-type systems.
+allowing for well-characterised detections for systems with orbital periods up to $\approx$44 months). 
 
-\begin{itemize}
-    \item show jitter compared to RP flux, etc
-    \item how the model was fit
-    \item show results of the fit
-    \item what things did we \emph{not} include in the model (eg difference between temperature and the temperature of the template used), and why
-    \item results
-\end{itemize}
+For higher-order star systems with longer periods, we can still find that a
+stellar multiple system is more likely than a single star scenario, but our
+estimate of the orbital properties (e.g., the semi-amplitude $K$) will be biased
+to lower values because we have not fully sampled half of the orbital period.
+At even longer orbital periods, or for stellar multiples with mass ratios that
+produce a small velocity semi-amplitude $K$, under our assumptions these systems 
+may be classified as single-star systems because the intrinsic radial velocity variation is within the expected 
+variations for single stars of a similar apparent magnitude and colour. We 
+revisit this issue in Section \ref{sec:sb_limits}, where we explicitly define 
+the probability that a \Gaia\ source is a SB1-type system $p(\textrm{SB1}|y)$ 
+within defined limits of orbital period (and other orbital and source parameters). 
+Outside of this parameter range, we are insensitive to distinguishing single-star 
+systems from higher-order SB1-type systems.
+
+% Model fitting.
+
+% Figure: fitting the radial velocity variance as a function of stellar properties.
+
+% Figures: Binarity as a function of source properties.
+
+% Figure: h-r diagram of SB1 binary fraction
+
+
+% Figure: histogram of binaries as a fucntion of the Rv excess
 
 
 
@@ -252,10 +260,9 @@ too faint (low \rp\ flux), or is either too blue or too red. We adopt
 conservative limits for when the radial velocity completeness starts to drop 
 with these properties, and we assume that any source within the following
 parameter range
-
 \begin{eqnarray}
     \mathrm{phot\,\,rp\,\,mean\,\,flux} & \in & [10^{4}, 10^8] \nonumber \\
-    \mathrm{bp\,\,-rp} & \in & [X, Y] 
+    \mathrm{bp-rp} & \in & [X, Y] 
     \label{eq:sb2_criteria}
 \end{eqnarray}
 \noindent{}is likely to be a double-lined spectroscopic binary (SB2) if no 
@@ -300,7 +307,18 @@ complex (unknown) function of parameter space.
 % 		  longitude
 
 
-\subsection{Unresolved equal mass binaries: photometry}
+
+\subsection{Unresolved near-equal mass binaries: photometry}
+\label{sec:pb_methods}
+
+If a binary system is observed nearly face-on (at an inclination angle 
+$i \approx 0^\circ$) then there is will be no detectable excess radial 
+velocity variations. In principle there may be detectable astrometric
+variations, but most near-equal mass binaries would be detected more 
+reliably through intrinsic magnitudes that are anomalously lower (brighter)
+and bluer colours than what would be expected for a single star system.
+
+\todo{How the fuck am I going to model this, exactly?}
 
 
 
@@ -423,11 +441,10 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 \acknowledgements
 
 It is a pleasure to thank
-    Adrian Price-Whelan,
-	David W. Hogg,
-	Lorenzo Spina, 
+    Adrian Price-Whelan (Princeton University),
+	Lorenzo Spina (Monash University), 
 		and 
-	Kevin C. Schlaufman.
+	Kevin C. Schlaufman (Johns Hopkins University).
 This work was partly supported through the Australian Research Council 
 through Discovery Grant DP160100637.
 This work has made use of data from the European Space Agency (ESA) mission {\it

@@ -15,8 +15,103 @@ import velociraptor
 data_path = "data/rv-all.fits"
 sources = velociraptor.load_gaia_sources(data_path)
 
+# Calculate temperature from bp-rp colour and use the distance from the
+# template as a predictor for the error in radial velocity (under the assumption
+# that the wrong template was used, giving a higher velocity error)
+use_in_fit = np.isfinite(sources["radial_velocity"]) \
+           * (sources["phot_bp_rp_excess_factor"] < 1.5) \
+           * np.isfinite(sources["bp_rp"]) \
+           * np.isfinite(sources["teff_val"]) \
+           * (sources["bp_rp"] < 2.5) \
+           * (sources["bp_rp"] > 0.5)
+
+x = sources["bp_rp"][use_in_fit]
+y = sources["teff_val"][use_in_fit]
+
+coeff = np.polyfit(1.0/x, y, 2)
+
+xi = np.linspace(x.min(), x.max(), 100)
+
+fig, ax = plt.subplots()
+ax.scatter(x, y, s=1, alpha=0.05, facecolor="k")
+ax.plot(xi, np.polyval(coeff, 1.0/xi), c='r', lw=2)
+
+
+#sources["approx_teff"] = np.polyval(coeff, 1.0/sources["bp_rp"])
+sources["teff_from_rv_template"] = np.abs(
+    np.polyval(coeff, 1.0/sources["bp_rp"]) - sources["rv_template_teff"])
+
+N_bins = 100
+H_all, xedges, yedges = np.histogram2d(
+    sources["teff_from_rv_template"][use_in_fit],
+    sources["rv_excess_variance"][use_in_fit],
+    bins=(
+        np.linspace(0, 3000, N_bins), 
+        np.linspace(0, 10000, N_bins)
+    ))
+
+
+kwds = dict(
+    aspect=np.ptp(xedges)/np.ptp(yedges), 
+    extent=(xedges[0], xedges[-1], yedges[-1], yedges[0]),
+)
+
+from matplotlib.colors import LogNorm
+fig, ax = plt.subplots(figsize=(7.0, 5.5))
+image = ax.imshow(H_all.T, norm=LogNorm(), cmap="Blues", **kwds)
+cbar = plt.colorbar(image, ax=ax)
+cbar.set_label(r"\textrm{count}")
+
+ax.set_ylim(ax.get_ylim()[::-1])
+
+ax.set_xlabel(r"$|T_{\rm eff} - T_{\rm eff,template}|$ $({\rm K})$")
+ax.set_ylabel(r"\textrm{radial velocity excess variance} $({\rm km}^2\,{\rm s}^{-2})$")
+fig.tight_layout()
+
+fig.savefig("figures/rv_excess_variance_wrt_teff_diff.pdf", dpi=300)
+
+N_bins = 30
+x = sources["teff_from_rv_template"][use_in_fit]
+fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+
+for i, (ax, equidensity) in enumerate(zip(axes, (True, False))):
+
+    if equidensity:
+        bins = np.percentile(x, np.linspace(0, 100, N_bins))
+    else:
+        bins = np.linspace(np.min(x), np.max(x), N_bins)
+
+
+    binary_fraction = np.zeros(N_bins - 1, dtype=float)
+    indices = np.digitize(sources["teff_from_rv_template"][use_in_fit], bins) - 1
+
+    from collections import Counter
+    counts = Counter(indices)
+    N_per_bin = np.array([counts.get(k, 0) for k in range(N_bins - 1)],
+                     dtype=float)
+
+
+    counts_finite = Counter(indices[(sources["p_sb_50"] > 0.5)[use_in_fit]])
+    N_rv_per_bin = np.array([counts_finite.get(k, 0) for k in range(N_bins - 1)],
+                            dtype=float)
+
+    f_rv_per_bin = N_rv_per_bin / N_per_bin
+    f_rv_per_bin_err = f_rv_per_bin * np.sqrt(
+                (np.sqrt(N_rv_per_bin)/N_rv_per_bin)**2 + \
+                (np.sqrt(N_per_bin)/N_per_bin)**2)
+
+    centroids = bins[:-1] + 0.5 * np.diff(bins)
+    #fig, ax = plt.subplots()
+    ax.plot(centroids, f_rv_per_bin, drawstyle="steps-mid")
+    ax.errorbar(centroids, f_rv_per_bin, yerr=f_rv_per_bin_err, fmt=None, )
+
+raise a
+
+
+
 model, data_dict, init_dict, used_in_fit = velociraptor.prepare_model(
     S=1e4, **sources)
+
 
 # This *works*, but you could start from any random position.
 init_dict = dict([
@@ -128,8 +223,6 @@ sources["rv_excess_variance"] = np.nan * np.ones(len(sources))
 
 for j, index in enumerate(np.where(has_rv)[0]):
 
-    print(j, J)
-
     dm = velociraptor._rvf_design_matrix(**sources[[index]])
 
     mu = np.dot(dm.T, chains_dict["mu_coefficients"].T)
@@ -143,8 +236,12 @@ for j, index in enumerate(np.where(has_rv)[0]):
     log_p_sb = log_pb - logsumexp([log_pb * np.ones_like(log_ps), log_ps], axis=0)
     p_sb = np.exp(log_p_sb).flatten()
 
-    for p, v in zip(percentiles, np.percentile(p_sb, percentiles)):
+    vs = np.percentile(p_sb, percentiles)
+    for p, v in zip(percentiles, vs):
         sources["p_sb_{:.0f}".format(p)][index] = v
+
+    print(j, J, vs)
+
 
     # Calculate excess variance.
     rv_max_single_star_variance = np.percentile(
