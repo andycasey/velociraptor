@@ -63,6 +63,48 @@ def load_gaia_sources(path, **kwargs):
     return sources
 
 
+def load_gaia_sources_from_fitsio(path, **kwargs):
+    """
+    Load a subset of Gaia data and calculate additional properties like
+    `absolute_g_mag`, `absolute_bp_mag`, `absolute_rp_mag`, and
+    `rv_single_epoch_variance`.
+
+    :param path:
+        The local path to load the sources from.
+    """
+
+    sources = Table(fits.open(path)[1].data)
+
+    metadata = dict()
+
+    for band in ("g", "bp", "rp"):
+        metadata["absolute_{}_mag".format(band)] = \
+              sources["phot_{}_mean_mag".format(band)] \
+            + 5 * np.log10(sources["parallax"]/100.0)
+
+    metadata["rv_single_epoch_variance"] = sources["radial_velocity_error"]**2 \
+                                         * sources["rv_nb_transits"] * np.pi/2.0,
+                               
+    # Approximate temperature from bp-rp colour    
+    use_in_fit = np.isfinite(sources["radial_velocity"]) \
+               * (sources["phot_bp_rp_excess_factor"] < 1.5) \
+               * np.isfinite(sources["bp_rp"]) \
+               * np.isfinite(sources["teff_val"]) \
+               * (sources["bp_rp"] < 2.5) \
+               * (sources["bp_rp"] > 0.5)
+
+    x = sources["bp_rp"][use_in_fit]
+    y = sources["teff_val"][use_in_fit]
+
+    coeff = np.polyfit(1.0/x, y, 2)
+
+    metadata["approx_teff_from_bp_rp"] = np.clip(
+        np.polyval(coeff, 1.0/sources["bp_rp"]),
+        3500, 8000)
+
+    return (sources, metadata)
+
+
 def prepare_model(rv_single_epoch_variance, target=0.01, model_path="model.stan",
     S=None, design_matrix_function=None, mask=None,
     **source_params):
