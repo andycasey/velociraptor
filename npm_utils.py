@@ -75,8 +75,11 @@ def ln_prob(y, L, *params):
     return lp
 
 
-def _unpack_params(params, L):
+def _unpack_params(params, L=None):
     # unpack the multdimensional values.
+    if L is None:
+        L = int((len(params) - 1)/4)
+
     theta = params[0]
     mu_single = np.array(params[1:1 + L])
     sigma_single = np.array(params[1 + L:1 + 2 * L])
@@ -104,11 +107,19 @@ def get_initialization_point(y):
         theta=0.5,
         mu_single=np.median(y, axis=0),
         sigma_single=0.1 * np.median(y, axis=0),
-        sigma_multiple=1e-2 * np.ones(D),
+        sigma_multiple=0.1 * np.ones(D),
     )
-    init_dict["mu_multiple"] = 1.05 * (
-          np.log(init_dict["mu_single"] + 3 * init_dict["sigma_single"]) \
-        + pow(init_dict["sigma_multiple"], 2))
+
+    # mu_multiple is *highly* constrained. Select the mid-point between what is
+    # OK:
+    
+    mu_multiple_ranges = np.array([
+        np.log(init_dict["mu_single"]) + init_dict["sigma_multiple"]**2,
+        np.log(init_dict["mu_single"] + 3 * init_dict["sigma_single"]) + pow(init_dict["sigma_multiple"], 2)
+    ])
+
+    init_dict["mu_multiple"] = np.mean(mu_multiple_ranges, axis=0)
+    #init_dict["mu_multiple_uv"] = 0.5 * np.ones(D)
 
     x0 = _pack_params(**init_dict)
     
