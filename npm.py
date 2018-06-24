@@ -292,3 +292,9 @@ rv_excess = np.array([
 # the radial velocity excess!
 
 # Make a corner plot of the various properties? Coloured by probabilities?
+
+
+
+with open("rv-all-subset-1e4-results.pickle", "wb") as fp: 
+    pickle.dump((subset, opt_params, predictor_label_names, p_single, rv_excess), fp, -1)
+
