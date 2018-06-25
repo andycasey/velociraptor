@@ -2,8 +2,180 @@
 import numpy as np
 from scipy import (optimize as op, stats)
 from sklearn import neighbors as neighbours
+from scipy.special import logsumexp
 
 import stan_utils as stan
+
+
+
+def build_kdtree(X, **kwargs):
+    """
+    Build a KD-tree from the finite values in the given array.
+    """
+
+    scale = np.ptp(X, axis=0)
+    offset = np.mean(X, axis=0)
+    X_norm = (X - offset)/scale
+
+    kdt_kwds = dict(leaf_size=40, metric="minkowski")
+    kdt_kwds.update(kwargs)
+    kdt = neighbours.KDTree(X_norm, **kdt_kwds)
+
+    return (kdt, scale, offset)
+
+
+def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
+    minimum_radius=None, dualtree=False, full_output=False):
+    """
+    Query around a point in the KD-Tree until certain conditions are met (e.g.,
+    the number of points in the ball, and the minimum radius that the ball
+    expands out to).
+    
+    :param kdtree:
+        The pre-computed KD-Tree.
+
+    :param point:
+        The (unscaled) point to query around.
+
+    :param offset: [optional]
+        The offset to apply to the query point.
+
+    :param scale: [optional]
+        The scaling to apply to the query point, after subtracting the offset.
+
+    :param minimum_points: [optional]
+        The minimum number of points to return in the ball.
+
+    :param minimum_radius: [optional]
+        The minimum radius (or radii) that the ball must extend to.
+
+    :param dualtree: [optional]
+        Use the dual tree formalism for the query: a tree is built for the query
+        points, and the pair of trees is  used to efficiently search this space.
+        This can lead to better performance as the number of points grows large.
+
+    :param full_output: [optional]
+        If `True`, return a two length tuple of the distances to each point and
+        the indicies, otherwise just return the indices.
+    """
+
+    point_orig = np.atleast_1d(point).reshape(1, -1)
+    point = (point_orig - offset)/scale
+    N, D = kdtree.data.shape
+
+    if minimum_radius is None or np.max(minimum_radius) <= 0:
+        # We can just query the nearest number of points.
+        d, indices = kdtree.query(point, k=minimum_points, 
+            sort_results=False, return_distance=True, dualtree=dualtree)
+
+    else:
+        # What (scaled) radius do we need to go out to?
+        minimum_radius = np.atleast_1d(minimum_radius)
+        if minimum_radius.size == 1:
+            minimum_radius = np.ones(D) * minimum_radius
+
+        else:
+            assert minimum_radius.size == D, \
+                "minimum radius dimensions must match the data dimensions"
+
+        # What normalised scale is this?
+        min_radius = np.max(minimum_radius/scale)
+
+        # Check that the minimum radius norm will also meet our minimum number
+        # of points constraint. Otherwise, we need to use two point
+        # auto-correlation functions to see how far to go out to.
+        K = kdtree.two_point_correlation(point, min_radius)
+        if minimum_points is not None and K < minimum_points:
+
+            # If the KD-tree is normalised correctly then the PTP of the data
+            # should be unity in all dimensions. Therefore the maximum radius is
+            # twice this.
+            max_radius = 2.0 # todo: revisit this?
+            #max_radius = 2 * np.max(np.ptp(kdtree.data, axis=0))
+
+            if minimum_points >= N:
+                radius = max_radius
+
+            else:
+                # Use the two-point autocorrelation function to figure out the
+                # appropriate radius.
+                left, right = (min_radius, max_radius)
+
+                ri = np.linspace(left, right, N - K)
+                counts = kdtree.two_point_correlation(point, ri)
+                radius = ri[counts >= minimum_points][0]
+        else:
+            radius = min_radius
+
+        # two_point_correlation(point, minimum_radius_norm)
+        #   is eequivalent to
+        # query_radius(point, minimum_radius_norm, count_only=True)
+        # but in my tests two_point_correlation was a little faster.
+
+        # kdtree.query_radius returns indices, d
+        # kdtree.query returns d, indices
+        # .... are you serious?
+        indices, d = kdtree.query_radius(point, radius, 
+            return_distance=True, sort_results=False)
+
+    d, indices = (d[0], indices[0])
+
+    return (d, indices) if full_output else indices
+
+
+def normal_lpdf(y, mu, sigma):
+    ivar = sigma**(-2)
+    return 0.5 * (np.log(ivar) - np.log(2 * np.pi) - (y - mu)**2 * ivar)
+
+def lognormal_lpdf(y, mu, sigma):
+    ivar = sigma**(-2)
+    return - 0.5 * np.log(2 * np.pi) - np.log(y * sigma) \
+           - 0.5 * (np.log(y) - mu)**2 * ivar
+
+
+
+# Calculate log-probabilities for all of the stars we considered.
+def membership_probability(y, p_opt):
+
+    y = np.atleast_1d(y)
+    theta, s_mu, s_sigma, m_mu, m_sigma = _unpack_params(_pack_params(**p_opt))
+
+    assert s_mu.size == y.size, "The size of y should match the size of mu"
+
+
+    D = y.size
+    ln_prob = np.zeros((D, 2))
+    for d in range(D):
+        ln_prob[d] = [
+            normal_lpdf(y[d], s_mu[d], s_sigma[d]),
+            lognormal_lpdf(y[d], m_mu[d], m_sigma[d])
+        ]
+
+    # TODO: I am not certain that I am summing these log probabilities correctly
+
+    sum_ln_prob = np.sum(ln_prob, axis=0) # per mixture
+    ln_likelihood = logsumexp(sum_ln_prob)
+
+    with np.errstate(under="ignore"):
+        ln_membership = sum_ln_prob - ln_likelihood
+
+    return np.exp(ln_membership)
+
+
+
+def label_excess(y, p_opt, label_index):
+
+    y = np.atleast_1d(y)
+    _, s_mu, s_sigma, __, ___ = _unpack_params(_pack_params(**p_opt))
+
+    assert s_mu.size == y.size, "The size of y should match the size of mu"
+
+    excess = np.sqrt(y[label_index]**2 - s_mu[label_index]**2)
+    significance = excess/s_sigma[label_index]
+
+    return (excess, significance)
+
+
 
 
 def build_kdt(X_norm, **kwargs):
@@ -15,8 +187,8 @@ def build_kdt(X_norm, **kwargs):
     return kdt
 
 
-def get_ball_around_point(kdt, point, K=1000, full_output=False):
-    dist, k_indices = kdt.query(point, K)
+def get_ball_around_point(kdt, point, K=1000, scale=1, offset=0, full_output=False):
+    dist, k_indices = kdt.query((point - offset)/scale, K)
     dist, k_indices = (dist[0], k_indices[0])
     return (k_indices, dist) if full_output else k_indices
 
@@ -89,7 +261,7 @@ def _unpack_params(params, L=None):
     return (theta, mu_single, sigma_single, mu_multiple, sigma_multiple)
 
 
-def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple):
+def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple, **kwargs):
     return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple])
 
 
