@@ -9,13 +9,13 @@ kdtree_label_names:
  - phot_rp_mean_mag
 kdtree_minimum_points: 128
 kdtree_relative_scales:
- - 0.01
+ - 0.1
  - 1.0
  - 1.0
 kdtree_minimum_radius:
- - 0
- - 0
- - 0
+ - 0.05
+ - 0.25
+ - 0.25
 
 predictor_label_names:
  - rv_single_epoch_scatter

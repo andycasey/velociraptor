@@ -5,6 +5,7 @@ __pycache__/
 notebooks/.ipynb_checkpoints/
 
 *.pkl
+*.pickle
 data/*.fits*
 data/*.csv
 figures/*.pdf

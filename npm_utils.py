@@ -38,19 +38,19 @@ def build_kdtree(X, relative_scales=None,**kwargs):
     Build a KD-tree from the finite values in the given array.
     """
 
-    scale = np.ptp(X, axis=0)
     offset = np.mean(X, axis=0)
 
-    if relative_scales is not None:
-        scale *= relative_scales
-
-    X_norm = (X - offset)/scale
+    if relative_scales is None:
+        # Whiten the data.
+        relative_scales = np.ptp(X, axis=0)
+    
+    X_norm = (X - offset)/relative_scales
 
     kdt_kwds = dict(leaf_size=40, metric="minkowski")
     kdt_kwds.update(kwargs)
     kdt = neighbours.KDTree(X_norm, **kdt_kwds)
 
-    return (kdt, scale, offset)
+    return (kdt, relative_scales, offset)
 
 
 def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
@@ -119,8 +119,9 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
             # If the KD-tree is normalised correctly then the PTP of the data
             # should be unity in all dimensions. Therefore the maximum radius is
             # twice this.
-            max_radius = 2.0 # todo: revisit this?
-            #max_radius = 2 * np.max(np.ptp(kdtree.data, axis=0))
+
+            # Nope, don't assume!
+            max_radius = 2 * np.max(np.ptp(kdtree.data, axis=0))
 
             if minimum_points >= N:
                 radius = max_radius
