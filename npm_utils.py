@@ -1,20 +1,49 @@
 
 import numpy as np
+import os
 from scipy import (optimize as op, stats)
 from sklearn import neighbors as neighbours
 from scipy.special import logsumexp
 
 import stan_utils as stan
 
+CONFIG_PATH = "npm-config.yaml"
 
 
-def build_kdtree(X, **kwargs):
+def get_indices_path(source_id, config):
+    path = os.path.join(config["results_path"], "{0}/indices".format(source_id))
+    dirname = os.path.dirname(path)
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+
+    return path
+
+def get_output_path(source_id, config):
+    results_suffix = config.get("results_suffix", None)
+    path = os.path.join(config["results_path"], "{0}/{1}{2}".format(
+        source_id, 
+        "+".join(config["predictor_label_names"]),
+        ".{}".format(results_suffix) if results_suffix is not None else ""))
+    dirname = os.path.dirname(path)
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+
+    return path
+
+
+
+
+def build_kdtree(X, relative_scales=None,**kwargs):
     """
     Build a KD-tree from the finite values in the given array.
     """
 
     scale = np.ptp(X, axis=0)
     offset = np.mean(X, axis=0)
+
+    if relative_scales is not None:
+        scale *= relative_scales
+
     X_norm = (X - offset)/scale
 
     kdt_kwds = dict(leaf_size=40, metric="minkowski")
@@ -66,7 +95,7 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
     if minimum_radius is None or np.max(minimum_radius) <= 0:
         # We can just query the nearest number of points.
         d, indices = kdtree.query(point, k=minimum_points, 
-            sort_results=False, return_distance=True, dualtree=dualtree)
+            sort_results=True, return_distance=True, dualtree=dualtree)
 
     else:
         # What (scaled) radius do we need to go out to?
@@ -116,7 +145,7 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
         # kdtree.query returns d, indices
         # .... are you serious?
         indices, d = kdtree.query_radius(point, radius, 
-            return_distance=True, sort_results=False)
+            return_distance=True, sort_results=True)
 
     d, indices = (d[0], indices[0])
 
@@ -299,5 +328,9 @@ def get_initialization_point(y):
 
     p_opt = op.minimize(nlp, **op_kwds)
 
-    # make no checks
-    return p_opt.x
+    init_dict = dict(zip(
+        ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple"),
+        _unpack_params(p_opt.x)))
+    init_dict["mu_multiple_uv"] = 0.5 * np.ones(D)
+
+    return init_dict

@@ -76,7 +76,8 @@ def scatter_hrd(x, y, z=None, xlabel=None, ylabel=None, zlabel=None, ax=None,
     else:
         idx = None
 
-    scatter_kwds = dict(cmap="viridis", vmin=vmin, vmax=vmax, alpha=1, s=1)
+    scatter_kwds = dict(cmap="viridis", vmin=vmin, vmax=vmax, alpha=1, s=1,
+                        rasterized=True)
     scatter_kwds.update(kwargs)
     scat = ax.scatter(x, y, c=z, **scatter_kwds)
     if z is not None:
@@ -100,25 +101,28 @@ def scatter_hrd(x, y, z=None, xlabel=None, ylabel=None, zlabel=None, ax=None,
 kwds = dict(xlabel=r"\textrm{bp - rp}", ylabel=r"\textrm{absolute rp mag}")
 
 
-fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"],
-                  p_single, zlabel=r"\textrm{p(single$|$data)}", zsort=1, **kwds)
+fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"], p_single, 
+                  zlabel=r"\textrm{p(single star$|$data)}", s=5, zsort=1, **kwds)
+fig.savefig("figures/subset/p_single.png", dpi=150)
 
 
-fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"], np.log10(1 + rv_excess.T[0]),
-                  zlabel=r"$\log_{10}(1 + \textrm{radial velocity excess / km\,s}^{-1})$", 
-                  zsort=-1, alpha=1, s=5, cmap="viridis_r", **kwds)
+fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"], rv_excess.T[0],
+                  zlabel=r"$\textrm{radial velocity excess (clipped) / km\,s}^{-1}$", 
+                  zsort=-1, alpha=1, s=5, vmin=0, vmax=10, cmap="viridis_r", **kwds)
+fig.savefig("figures/subset/rv_excess.png", dpi=150)
 
 
 fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"], rv_excess.T[1],
-                  zlabel=r"\textrm{radial velocity excess significance}", 
-                  zsort=-1, alpha=1, cmap="viridis_r", vmin=0, vmax=5, **kwds)
-
+                  zlabel=r"\textrm{radial velocity excess significance (clipped)}", 
+                  zsort=-1, s=5, alpha=1, cmap="viridis_r", vmin=0, vmax=5, **kwds)
+fig.savefig("figures/subset/rv_excess_sig.png", dpi=150)
 
 
 # Plot as a function of the optimized values.
 fig = scatter_hrd(data["bp_rp"], data["absolute_rp_mag"], opt_params.T[0],
                   zlabel=r"$\mathrm{\theta}$", s=5,
                   zsort=1, alpha=1, cmap="viridis_r", **kwds)
+fig.savefig("figures/subset/opt_theta.png", dpi=150)
 
 
 for label_name in predictor_label_names:
@@ -133,6 +137,10 @@ for label_name in predictor_label_names:
                               opt_params.T[index], zlabel=zlabel,
                               s=5, zsort=1, alpha=1, cmap="viridis_r", 
                               **kwds)
+            fig.savefig(
+                "figures/subset/opt_{0}_star_{1}_{2}.png".format(
+                    "single" if single else "multiple", label_name, kind),
+                dpi=150)
 
 
 # Plot binary fraction histogram as a function of various things?
