@@ -43,7 +43,7 @@ def initialize_from_nearby_point(indices, data, config):
 
 
 
-def optimize_npm_at_point(indices_path, output_path, data, config):
+def optimize_npm_at_point(data_index, indices_path, output_path, data, config):
 
     # Get indices and load data.
     with open(indices_path, "rb") as fp:
@@ -81,11 +81,21 @@ def optimize_npm_at_point(indices_path, output_path, data, config):
 
     model = stan.load_stan_model(config["model_path"])
 
+    S = config.get("share_optimised_result_with_nearest", 0)
+    
     t_init = time()
-    p_opt = model.optimizing(**opt_kwds)
+    try:
+        p_opt = model.optimizing(**opt_kwds)
+    
+    except:
+        logging.exception("Failed to optimize from {}".frmat(indices_path))
+        return (indices, S, None)
+
     t_complete = time() - t_init
 
-    result = dict(p_opt=p_opt, init_from_source_id=init_from_source_id)
+    result = dict(p_opt=p_opt, 
+                  data_index=data_index, 
+                  init_from_source_id=init_from_source_id)
 
     logging.info("p_opt ({0:.0f}s): {1}".format(t_complete, p_opt))
     logging.info("Writing to {}".format(output_path))
@@ -94,16 +104,19 @@ def optimize_npm_at_point(indices_path, output_path, data, config):
         pickle.dump(result, fp, -1)
 
     # Assign this result to nearby stars?
-    S = config.get("share_optimised_result_with_nearest", 0)
     logging.info("Sharing result with nearest {} neighbours".format(S))
-    for nearby_index in indices[1:1 + S]:
 
+
+    for nearby_index in indices[:1 + S]:
+        if nearby_index == data_index: continue
+        
         nearby_output_path = npm.get_output_path(data["source_id"][nearby_index],
                                                  config)
         if os.path.lexists(nearby_output_path):
             os.unlink(nearby_output_path)
 
-        os.symlink(output_path, nearby_output_path)
+        os.symlink(os.path.abspath(output_path), 
+                   os.path.abspath(nearby_output_path))
 
         logging.info("Shared result with neighbour {} -> {}".format(
             output_path, nearby_output_path))
@@ -171,7 +184,8 @@ if __name__ == "__main__":
                         index, output_path))
                 break
 
-            indices, S, p_opt = optimize_npm_at_point(indices_path,
+            indices, S, p_opt = optimize_npm_at_point(index,
+                                                      indices_path,
                                                       output_path,
                                                       data,
                                                       config)

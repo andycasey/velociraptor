@@ -18,16 +18,16 @@ transformed parameters {
     # Bound the log-normal such that at most 10% of the support is at the mean
     # of the normal.
     {
-        real max_support_fraction;
-        real v;
-        max_support_fraction = 0.10;
-        v = 2 * max_support_fraction - 1;
+        real min_support;
+        real min_mode;
 
         for (d in 1:D) {
             real bound_lower;
             real bound_upper;
-            # 0.575 ~= sqrt(2/pi)/(2log2)
-            bound_lower = log(mu_single[d]) - 0.575 * sigma_multiple[d] * (log(1 + v) - log(1 - v));
+            min_support = log(mu_single[d]) + 1.263404 * sigma_multiple[d];
+            min_mode = log(mu_single[d] + 1 * sigma_single[d]) + pow(sigma_multiple[d], 2);
+
+            bound_lower = max([min_mode, min_support]);
             bound_upper = log(mu_single[d] + 5 * sigma_single[d]) + pow(sigma_multiple[d], 2);
             mu_multiple[d] = bound_lower + mu_multiple_uv[d] * (bound_upper - bound_lower);
         }

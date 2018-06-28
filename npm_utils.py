@@ -4,29 +4,32 @@ import os
 from scipy import (optimize as op, stats)
 from sklearn import neighbors as neighbours
 from scipy.special import logsumexp
+from time import time
 
 import stan_utils as stan
 
 CONFIG_PATH = "npm-config.yaml"
 
+def split_source_id(source_id, chunk=4):
+    return "/".join(map("".join, zip(*[iter(str(source_id))] * chunk)))
+
+
 
 def get_indices_path(source_id, config):
-    path = os.path.join(config["results_path"], "{0}/indices".format(source_id))
-    dirname = os.path.dirname(path)
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
-
+    path = os.path.join(config["results_path"], 
+        "{0}/indices".format(split_source_id(source_id)))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 
-def get_output_path(source_id, config):
+
+def get_output_path(source_id, config, check_path_exists=True):
     results_suffix = config.get("results_suffix", None)
     path = os.path.join(config["results_path"], "{0}/{1}{2}".format(
-        source_id, 
+        split_source_id(source_id), 
         "+".join(config["predictor_label_names"]),
         ".{}".format(results_suffix) if results_suffix is not None else ""))
-    dirname = os.path.dirname(path)
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
+    if check_path_exists:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
 
     return path
 
@@ -53,8 +56,8 @@ def build_kdtree(X, relative_scales=None,**kwargs):
     return (kdt, relative_scales, offset)
 
 
-def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
-    minimum_radius=None, dualtree=False, full_output=False):
+def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None, 
+    minimum_points=1, maximum_points=None, dualtree=False, full_output=False):
     """
     Query around a point in the KD-Tree until certain conditions are met (e.g.,
     the number of points in the ball, and the minimum radius that the ball
@@ -131,9 +134,22 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
                 # appropriate radius.
                 left, right = (min_radius, max_radius)
 
-                ri = np.linspace(left, right, N - K)
-                counts = kdtree.two_point_correlation(point, ri)
-                radius = ri[counts >= minimum_points][0]
+                max_scale = int(np.log10(N - K))
+                Q = None # 10 * max_scale
+                for scale in np.logspace(-max_scale, 1, Q):
+    
+                    P = int(scale * (N - K))
+                    ri = np.linspace(left, scale * right, P)
+                    counts = kdtree.two_point_correlation(point, ri)
+
+                    try:
+                        radius = ri[counts >= minimum_points][0]
+
+                    except:
+                        continue
+
+                    else:
+                        break
         else:
             radius = min_radius
 
@@ -149,6 +165,15 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_points=1,
             return_distance=True, sort_results=True)
 
     d, indices = (d[0], indices[0])
+
+    L = len(indices)
+    if maximum_points is not None and L > maximum_points:
+        if maximum_points < minimum_points:
+            raise ValueError("minimum_points must be smaller than maximum_points")
+
+        # Sub-sample a random number.
+        sub_idx = np.random.choice(L, maximum_points, replace=False)
+        d, indices = (d[sub_idx], indices[sub_idx])
 
     return (d, indices) if full_output else indices
 
