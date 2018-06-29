@@ -20,8 +20,8 @@
 \newcommand{\bp}{\textsl{bp}}
 
 
-\newcommand{\NumberOfHigherOrderSystems}{XXX}
-\newcommand{\NumberOfSingleLinedSystems}{XXX}
+\newcommand{\NumberOfStellarMultiples}{XXX}
+\newcommand{\NumberOfStellarSingles}{XXX}
 
 
 \newcommand{\GaiaRVE}{\sigma_{\mathrm{V}_\mathrm{R}}^\mathrm{MTA}}
@@ -39,10 +39,12 @@
 
 \begin{document}
 
-\title{Detection and characterisation of stellar multiplicity with \Gaia}
+\title{Detection and characterisation of stellar multiplicity with Gaia}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
+
+% Some order of the following authors (order is TBD)
 
 \author[0000-0003-0174-0564]{Andrew R. Casey}
 \affiliation{School of Physics \& Astronomy, 
@@ -67,23 +69,36 @@
 \affiliation{Flatiron Institute,
 			 162 Fifth Ave, New York, NY 10010, USA}
 
+\author[0000-0003-3494-343X]{Carles Badenes}
+\affiliation{Department of Physics and Astronomy, 
+			 University of Pittsburgh, 
+			 3941 O'Hara Street, Pittsburgh, PA 15260, USA}
+
+\author[0000-0003-0872-7098]{Adrian M. Price-Whelan}
+\affiliation{Department of Astrophysical Sciences, 
+			 Princeton University, 
+			 Princeton, NJ 08544, USA}
+
+
 \begin{abstract}
-Most stars have stellar companions. The occurrence rate and properties of stellar 
-multiples (e.g., binaries, triples) is relevant to many fields of astrophysics, 
-but the effects of stellar multiplicity are commonly ignored in the analysis of 
-most stellar and galactic surveys. Here we use \Gaia\ data to identify 
-\todo{\NumberOfHigherOrderSystems} stellar multiple systems from radial velocity
-and astrometric jitter, photometry, and intrinsic luminosity. Our sample includes
-\todo{\NumberOfSingleLinedSystems} unresolved binary systems detected solely
-from radial velocity or astrometric jitter, which have orbital periods up to 
-$\approx$3.5\,yrs. We show that the ratio of jitter in radial velocity and
-astrometry can be calibrated to estimate inclination angles (and companion masses)
-for thousands of systems. \todo{We comment on stellar multiplicity with stellar
-metallicity}. \todo{We comment on systems with stellar remnants (e.g. NS/BHs).}
+The properties and occurrence rate of stellar multiples (e.g., binaries, triples) 
+underpins much of astrophysics. Precisely measuring these quantities is challenging
+and observationally demanding. Here we use \Gaia\ data to detect and partially 
+characterise \NumberOfStellarMultiples\ stellar multiple systems based on excess 
+astrometric jitter, excess radial velocity jitter, the absence of reported radial
+velocities, photometry, and intrinsic luminosity.
+\todo{We show that astrometric and radial velocity jitter can be calibrated to
+estimate inclination angles (and directly constrain companion masses) for thousands 
+of systems.}
+Comparisons with literature surveys on stellar multiplicity demonstrate that we 
+reliably detect binary systems with orbital periods up to $\approx$3.5\,yr. 
+\todo{A comment on stellar multiplicity with stellar metallicity.}
+\todo{A comment on stellar multiplicity in the field relative to clusters.}
+\todo{A comment on systems with stellar remnants (e.g., NS/BHs).}
 \end{abstract}
 
 
-\keywords{stars: dynamics}
+\keywords{(stars:) binaries: general, (stars:) binaries: spectroscopic, (stars:) binaries (including multiple): close, astrometry, techniques: radial velocities, methods: statistical}
 
 \section{Introduction} \label{sec:intro}
 
@@ -99,8 +114,8 @@ velocity measurements over many years for million of point stars in our galaxy.
 When a point source has an unresolved stellar companion within some range of orbital
 and stellar parameters, it is expected that there will be an anomalous excess in 
 these measured properties relative to a single star of a similar type. This is
-nothing new: astronomers have used radial velocity \citep{firstplanet} and 
-astrometric variations \citep{someone} and photometry \citep{someone} to infer the 
+nothing new: astronomers have used radial velocity \citep{Butler:1996} and 
+astrometric variations \citep{Muterspaugh:2010} and photometry \citep{someone} to infer the 
 presence of stellar and exoplanet companions forever. However, the opportunity
 presented by \Gaia\ is to infer the presence of stellar companions for millions
 of point sources, across both hemispheres. No ground- or space-based instrument
@@ -117,7 +132,7 @@ metallicity), and highlight some particularly noteworthy systems that would
 benefit from immediate follow-up spectroscopic observations. 
 
 
-\section{Method}
+\section{Method} \label{sec:method}
 
 There are many ways that binaries can be reliably identified using \Gaia\
 data, including radial velocity measurements, photometry, and astrometry.
@@ -130,8 +145,8 @@ incorporated into the detection and characterisation of stellar multiples.
 \label{sec:sb1_methods}
 
 Radial velocity measurements are not available for individual epochs in the 
-second \Gaia\ data release \citep{Lindegren:2018,Gaia_RVS}, but the a radial velocity point estimate and error
-is available for 7,224,631 sources \cite{gaia_rvs}. 
+second \Gaia\ data release \citep{Lindegren:2018,Cropper:2018}, but the a radial velocity point estimate and error
+is available for 7,224,631 sources \cite{Cropper:2018}. 
 The radial velocity error provided by \Gaia\ ($\GaiaRVE$; column name \texttt{radial\_velocity\_error}) 
 is a function of the number of transits $N$ (i.e., the number of observations; 
 represented by column \texttt{rv\_nb\_transits}) and the scatter among those $N$ measurements. 
@@ -332,7 +347,7 @@ effect of astrometric excess noise is due to stellar companions. Note that due
 to the astrometry `degree of freedom bug' in the processing of the second \Gaia\
 data release \citep[e.g., see Appendix A1 of ][]{Lindegren:2018}, we only make
 use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
-\citep{Michalik, TGAS, etc}. 
+\citep{Michalik:2015, Lindegren:2016}. 
 
 
 
@@ -346,7 +361,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 
 \begin{figure*}
-	\includegraphics[width=1.0\textwidth]{../figures/sb9-comparison.pdf}
+	\includegraphics[width=1.0\textwidth]{../figures/todo.png}
     \caption{Source radial velocity variance shown with respect to flux in
     the \Gaia\ BP, G, and RP bands. The source radial velocity variance 
     most closely follows the RP flux as it is closer to the \Gaia\ RVS
@@ -354,7 +369,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 \end{figure*}
 
 \begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
     \caption{Source mean \Gaia\ RP flux and radial velocity variance.
     Points are represented by their mean $BP-RP$ color, confirming that
     there is some color dependency on the source radial velocity variance.}
@@ -363,7 +378,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 
 \begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
     \caption{Mixture model fitted.}
     \label{fig:mixture-model}
 \end{figure}
@@ -371,7 +386,7 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 
 \begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/sb9-comparison.pdf}
+	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
     \caption{Detected binary fraction as a function of the mean RP flux
     (top panels), the $BP-RP$ color (second panels), the number of 
     radial velocity transits (third panels), and the inferred temperature
@@ -420,15 +435,15 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 \section{Discussion}
 
-\subsection{Comparison with \citet{El_Badry:2017,El_Badry:2018}}
+\subsection{Comparison with \citet{El-Badry:2018}}
 
-\subsection{Comparison with \citet{Badenes:2017}}
+\subsection{Comparison with \citet{Badenes:2018}}
 
 \subsection{Comparison with \citet{Raghavan:2010}}
 
-\subsection{Comparison with \citet{Troup:2010}}
+\subsection{Comparison with \citet{Troup:2016}}
 
-\subsection{Comparison with \citet{Price-Whelan:2010}}
+\subsection{Comparison with \citet{Price-Whelan:2018}}
 
 \begin{itemize}
     \item \todo{binarity with metallicity}
@@ -440,12 +455,15 @@ use of astrometric excess noise from the \todo{Tycho-Gaia Astrometric Solution}
 
 \acknowledgements
 
+% At least some of these people will be promoted to the author list.
 It is a pleasure to thank
-    Adrian Price-Whelan (Princeton University),
-	Lorenzo Spina (Monash University), 
-		and 
-	Kevin C. Schlaufman (Johns Hopkins University).
-This work was partly supported through the Australian Research Council 
+	Berry Holl (Geneva),
+	Jose Hernandez (ESAC),
+	Daniel Michalik (ESA/ESTEC),
+	Kevin C. Schlaufman (Johns Hopkins University),
+		and
+	Lorenzo Spina (Monash University).
+This work was supported in part by the Australian Research Council 
 through Discovery Grant DP160100637.
 This work has made use of data from the European Space Agency (ESA) mission {\it
 Gaia} (\url{https://www.cosmos.esa.int/gaia}), processed by the {\it Gaia} Data
@@ -453,7 +471,7 @@ Processing and Analysis Consortium (DPAC,
 \url{https://www.cosmos.esa.int/web/gaia/dpac/consortium}). Funding for the DPAC
 has been provided by national institutions, in particular the institutions
 participating in the {\it Gaia} Multilateral Agreement.  This research was
-started at the NYC Gaia DR2 Workshop at the Center for Computational
+developed in part at the NYC Gaia DR2 Workshop at the Center for Computational
 Astrophysics of the Flatiron Institute in 2018 April.
 
 This work has made use of CosmoHub. CosmoHub has been developed by the Port 
@@ -473,8 +491,9 @@ Innovaci\'on'' program of the Spanish government.
     \package{numpy} \citep{numpy},
     \package{scipy} \citep{scipy},
     \package{Stan} \citep{stan},
-    \package{CosmoHub} \citep{cosmohub}
-    %tensorflow
+    \package{CosmoHub} \citep{cosmohub},
+    \package{TensorFlow} \citep{tensorflow}
+    \package{Jupyter Notebooks} \citep{jupyter-notebooks}
 }    
 
 \bibliographystyle{aasjournal}
