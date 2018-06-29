@@ -1,6 +1,7 @@
 data_path: data/gaia-sources-for-npm-colsubset.fits
 output_data_path: /media/acas0005/muon/velociraptor/npm-output.fits
 results_path: results/
+indices_path: indices.memmap
 results_suffix:
 model_path: npm-cdf-constraint.stan
 overwrite_indices: false

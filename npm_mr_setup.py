@@ -10,6 +10,7 @@ import pickle
 import yaml
 from astropy.io import fits
 from time import time
+import tqdm
 
 import npm_utils as npm
 
@@ -41,15 +42,18 @@ kwds.update(
     minimum_points=config.get("kdtree_minimum_points", 1024), # DEFAULT
     maximum_points=config.get("kdtree_maximum_points", 8192), # DEFAULT
 )
-overwrite = config.get("overwrite_indices", False)
+
+
+# Prepare the memory mapped array.
+memmap_kwds = dict(filename=config["indices_path"], dtype=np.int32)
+fp = np.memmap(mode="w+", shape=(N, kwds["maximum_points"]), **memmap_kwds)
+del fp
+
+# Calculate the number of bytes per row.
+bpr = kwds["maximum_points"] * np.dtype(memmap_kwds["dtype"]).itemsize
+
 
 def setup_point(index):
-
-    path = npm.get_indices_path(data["source_id"][index], config)
-    
-    if os.path.exists(path) and not overwrite: 
-        logging.info("Skipping {}/{} because {} exists".format(index, N, path))
-        return None
 
     # Get indices relative to the finite X
     finite_indices = npm.query_around_point(kdt, X[index], **kwds)
@@ -57,21 +61,23 @@ def setup_point(index):
     # Translate those finite indices to the original data file, since that is
     # what will be used by the map-jobs to run the optimisation.
     indices = finite[finite_indices]
+    
+    # Write the result to the right place in memory.
+    fp = np.memmap(mode="r+", shape=(1, kwds["maximum_points"]),
+                   offset=index * bpr, **memmap_kwds)
 
-    # Save the indices to disk.
-    with open(path, "wb") as fp:
-        pickle.dump(indices, fp, -1)
-
-    logging.info("{}/{}: Saved {} nearby points to {}".format(
-        index, N, indices.size, path))
+    P = indices.size
+    fp[0, :P] = indices
+    fp[0, P:] = -1
+    fp.flush()
+    del fp
 
     return None
 
 
-t_init = time()
+pool = mp.Pool(processes=100) # mp.cou_count()
+for _ in tqdm.tqdm(pool.imap_unordered(setup_point, range(N)), total=N):
+    pass
 
-processes = mp.cpu_count()
-with mp.Pool(processes) as pool:
-    pool.map(setup_point, range(N))
-
-logging.info("Setup completed in {:.0f}s".format(time() - t_init))
+pool.join()
+pool.close()

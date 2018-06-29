@@ -10,18 +10,6 @@ import stan_utils as stan
 
 CONFIG_PATH = "npm-config.yaml"
 
-def split_source_id(source_id, chunk=4):
-    return "/".join(map("".join, zip(*[iter(str(source_id))] * chunk)))
-
-
-
-def get_indices_path(source_id, config):
-    path = os.path.join(config["results_path"], 
-        "{0}/indices".format(split_source_id(source_id)))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    return path
-
-
 def get_output_path(source_id, config, check_path_exists=True):
     results_suffix = config.get("results_suffix", None)
     path = os.path.join(config["results_path"], "{0}/{1}{2}".format(
