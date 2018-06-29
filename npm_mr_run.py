@@ -14,12 +14,12 @@ import stan_utils as stan
 
 
 
-
-
 def initialize_from_nearby_point(indices, data, config):
     """
     Look for an initialization point from nearby results.
     """
+    raise NotImplementedError
+    return None
 
     for index in indices:
         source_id = data["source_id"][index]
@@ -43,16 +43,14 @@ def initialize_from_nearby_point(indices, data, config):
 
 
 
-def optimize_npm_at_point(data_index, indices_path, output_path, data, config):
+def optimize_npm_at_point(index, indices, data, config):
 
     # Get indices and load data.
-    with open(indices_path, "rb") as fp:
-        indices = pickle.load(fp)
-
     y = np.array([data[ln][indices] for ln in config["predictor_label_names"]]).T
     N, D = y.shape
 
     init_dict = initialize_from_nearby_point(indices, data, config)
+
     if init_dict is None:
         logging.info("Doing pre-initialization based on the data.")
         init_from_source_id = -1
@@ -145,59 +143,53 @@ if __name__ == "__main__":
     with open(npm.CONFIG_PATH, "r") as fp:
         config = yaml.load(fp)
 
-    # Construct function to get result path.
 
     # Load the data.
     data = fits.open(config["data_path"])[1].data
     N = len(data)
 
+
+    indices_kwds = dict(filename=config["indices_path"], dtype=np.int32)
+    indices_bpr = config["kdtree_maximum_points"] \
+                * np.dtype(indices_kwds["dtype"]).itemsize
+
+
+
     # Generator for a random index to run when the swarm gets bored.
     def indices():
         yield from np.random.choice(N, N, replace=False)
 
-    count = 0
-    for jumps, index in enumerate(indices()):
+    def run_swarm():
 
-        # Swarm strategy.
-        while True:
-            source_id = data["source_id"][index]
+        count = 0
+        for jumps, index in enumerate(indices()):
 
-            logging.info("At source {}/{}: {} (Gaia DR2 {}) {} jumps".format(
-                count, N, index, source_id, jumps))
+            # Swarm strategy.
+            while True:
+                
+                # Get indices for this index.
+                indices = np.memmap(mode="r", 
+                                    shape=(config["kdtree_maximum_points"], ),
+                                    offset=index * indices_bpr,
+                                    **indices_kwds)
 
-            indices_path = npm.get_indices_path(source_id, config)
+                if not any(fp > 0):
+                    # No indices. Skip.
+                    # TODO: update output file with nans at this row?
+                    break
+                
+                
+                S, p_opt = optimize_npm_at_point(index,
+                                                 indices,
+                                                 data,
+                                                 config)
 
-            # Check for input path.
-            if not os.path.exists(indices_path):
-                logging.info(
-                    "Skipping index {} because input path {} does not exist".format(
-                        index, indices_path))
-                break
+                # Select a new point to run on.
+                index = select_next_point(indices[1 + S:], data, config)
 
-            # Check for output path.
-            output_path = npm.get_output_path(source_id, config)
-
-            # Check for true files or symbolic links.
-            if os.path.lexists(output_path):
-                logging.info(
-                    "Skipping index {} because output path {} exists".format(
-                        index, output_path))
-                break
-
-            indices, S, p_opt = optimize_npm_at_point(index,
-                                                      indices_path,
-                                                      output_path,
-                                                      data,
-                                                      config)
-
-            count += 1
-
-            # Select a new point to run on.
-            index = select_next_point(indices[1 + S:], data, config)
-
-            if index is None:
-                logging.info("All nearby swarm points are done! "\
-                             "Selecting new point to start from.")
-                break # out to the generator
+                if index is None:
+                    logging.info("All nearby swarm points are done! "\
+                                 "Selecting new point to start from.")
+                    break # out to the generator
 
 
