@@ -135,7 +135,7 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None,
                 left, right = (min_radius, max_radius)
 
                 max_scale = int(np.log10(N - K))
-                Q = None # 10 * max_scale
+                Q = 10 * max_scale
                 for scale in np.logspace(-max_scale, 1, Q):
     
                     P = int(scale * (N - K))
