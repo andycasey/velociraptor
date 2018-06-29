@@ -4,12 +4,9 @@ Setup and run the non-parametric model as a map-reduce job.
 
 import numpy as np
 import os
-import logging
 import multiprocessing as mp
-import pickle
 import yaml
 from astropy.io import fits
-from time import time
 import tqdm
 
 import npm_utils as npm

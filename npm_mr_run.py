@@ -2,45 +2,66 @@
 import pickle
 import logging
 import numpy as np
+import multiprocessing as mp
+import tqdm
 import os
 import yaml
-from glob import glob
 from time import time
 from astropy.io import fits
-from random import shuffle
 
 import npm_utils as npm
 import stan_utils as stan
 
 
+with open(npm.CONFIG_PATH, "r") as fp:
+    config = yaml.load(fp)
 
-def initialize_from_nearby_point(indices, data, config):
+
+# Load the data.
+data = fits.open(config["data_path"])[1].data
+
+
+indices_kwds = dict(filename=config["indices_path"], dtype=np.int32)
+indices_bpr = config["kdtree_maximum_points"] \
+            * np.dtype(indices_kwds["dtype"]).itemsize
+
+
+N, L = (len(data), 4 * len(config["predictor_label_names"]) + 1)        
+results_kwds = dict(filename=config["results_path"], dtype=np.float32)
+results_bpr = N * np.dtype(results_kwds["dtype"]).itemsize
+
+# Create a results file.
+if not os.path.exists(config["results_path"]):
+    logging.info("Creating results file: {}".format(config["results_path"]))
+
+    fp = np.memmap(mode="w+", shape=(N, L), **results_kwds)
+    fp[:] = np.nan
+    fp.flush()
+    del fp
+
+
+def initialize_from_nearby_point(indices):
     """
     Look for an initialization point from nearby results.
     """
-    raise NotImplementedError
-    return None
 
     for index in indices:
-        source_id = data["source_id"][index]
-        output_path = npm.get_output_path(source_id, config)
-        if os.path.exists(output_path):
+        fp = np.memmap(mode="c", shape=(L, ), offset=results_bpr * index, 
+                       **results_kwds)
 
-            with open(output_path, "rb") as fp:
-                result = pickle.load(fp)
+        if np.all(np.isfinite(fp)):
+            values = npm._unpack_params(np.copy(fp))
+            keys = ("theta",
+                    "mu_single", "sigma_single",
+                    "mu_multiple", "sigma_multiple")
+            del fp
+            return (index, dict(zip(keys, values)))
 
-            # Ensure that we have the right dimensions.
-            p_opt = result["p_opt"]
-            for k in ("mu_single", "sigma_single", "mu_multiple", 
-                      "sigma_multiple", "mu_multiple_uv"):
-                p_opt[k] = np.atleast_1d(p_opt[k])
+        else:
+            del fp
+            continue
 
-            return (source_id, p_opt)
-
-    # Nothing!
     return None
-
-
 
 
 def optimize_npm_at_point(index, indices, data, config):
@@ -49,17 +70,14 @@ def optimize_npm_at_point(index, indices, data, config):
     y = np.array([data[ln][indices] for ln in config["predictor_label_names"]]).T
     N, D = y.shape
 
-    init_dict = initialize_from_nearby_point(indices, data, config)
+    init_dict = initialize_from_nearby_point(indices)
 
     if init_dict is None:
-        logging.info("Doing pre-initialization based on the data.")
-        init_from_source_id = -1
+        init_from_index = index
         init_dict = npm.get_initialization_point(y)
         
     else:
-        init_from_source_id, init_dict = init_dict
-        logging.info("Initializing from result obtained for source_id: {}"\
-                     .format(init_from_source_id))
+        init_from_index, init_dict = init_dict
 
     opt_kwds = dict(
         data=dict(y=y, N=N, D=D),
@@ -81,115 +99,88 @@ def optimize_npm_at_point(index, indices, data, config):
 
     S = config.get("share_optimised_result_with_nearest", 0)
     
-    t_init = time()
     try:
         p_opt = model.optimizing(**opt_kwds)
     
     except:
-        logging.exception("Failed to optimize from {}".frmat(indices_path))
-        return (indices, S, None)
+        return 0
 
-    t_complete = time() - t_init
+    result = npm._pack_params(**p_opt)
 
-    result = dict(p_opt=p_opt, 
-                  data_index=data_index, 
-                  init_from_source_id=init_from_source_id)
-
-    logging.info("p_opt ({0:.0f}s): {1}".format(t_complete, p_opt))
-    logging.info("Writing to {}".format(output_path))
-
-    with open(output_path, "wb") as fp:
-        pickle.dump(result, fp, -1)
-
-    # Assign this result to nearby stars?
-    logging.info("Sharing result with nearest {} neighbours".format(S))
-
+    # Update result in the memory-mapped array
+    fp = np.memmap(mode="r+", shape=(L, ), offset=results_bpr * index,
+                   **results_kwds)
+    fp[:] = result
+    fp.flush()
+    del fp
 
     for nearby_index in indices[:1 + S]:
-        if nearby_index == data_index: continue
-        
-        nearby_output_path = npm.get_output_path(data["source_id"][nearby_index],
-                                                 config)
-        if os.path.lexists(nearby_output_path):
-            os.unlink(nearby_output_path)
+        if nearby_index == index: continue
 
-        os.symlink(os.path.abspath(output_path), 
-                   os.path.abspath(nearby_output_path))
+        # Load the section in read/write mode.
+        fp = np.memmap(mode="r", shape=(L, ), offset=results_bpr * nearby_index,
+                       **results_kwds)
+        if not np.all(np.isfinite(fp)):
+            fp[:] = result
+            fp.flush()
+        del fp
 
-        logging.info("Shared result with neighbour {} -> {}".format(
-            output_path, nearby_output_path))
-
-
-    return (indices, S, p_opt)
+    return S
 
 
-def select_next_point(indices, data, config):
-
+def select_next_point(indices):
     for index in indices:
-        path = npm.get_output_path(data["source_id"][index], config)
-
-        # Check for true files or symbolic links.
-        if not os.path.lexists(path):
+        fp = np.memmap(mode="r", shape=(L, ), offset=results_bpr * index,
+                       **results_kwds)
+        if not np.all(np.isfinite(fp)):
+            del fp
             return index
+    return None
+
+
+# Generator for a random index to run when the swarm gets bored.
+def indices():
+    yield from np.random.choice(N, N, replace=False)
+
+
+def run_swarm(queue):
+    
+    # See if there is anything in the queue.
+    try:
+        index = queue.get(timeout=0)
+
+    except:
+        index = np.random.choice(N, 1)
+
+        
+        # Get indices for this index.
+        indices = np.memmap(mode="c", 
+                            shape=(config["kdtree_maximum_points"], ),
+                            offset=index * indices_bpr,
+                            **indices_kwds)
+
+        if not any(indices > 0):
+            return None
+
+        # Only use positive values.
+        indices = indices[indices >= 0]
+
+        S = optimize_npm_at_point(index, indices, data, config)
+        index = select_next_point(indices[1 + S:])
+
+        if index is not None:
+            queue.put(index)
 
     return None
 
 
+q = mp.Queue()
+P = mp.cpu_count()
+pool = mp.Pool(processes=P)
+for _ in tqdm.tqdm(pool.imap_unordered(run_swarm, (q for _ in range(N))), total=N):
+    pass
 
-
-
-if __name__ == "__main__":
-
-    with open(npm.CONFIG_PATH, "r") as fp:
-        config = yaml.load(fp)
-
-
-    # Load the data.
-    data = fits.open(config["data_path"])[1].data
-    N = len(data)
-
-
-    indices_kwds = dict(filename=config["indices_path"], dtype=np.int32)
-    indices_bpr = config["kdtree_maximum_points"] \
-                * np.dtype(indices_kwds["dtype"]).itemsize
-
-
-
-    # Generator for a random index to run when the swarm gets bored.
-    def indices():
-        yield from np.random.choice(N, N, replace=False)
-
-    def run_swarm():
-
-        count = 0
-        for jumps, index in enumerate(indices()):
-
-            # Swarm strategy.
-            while True:
-                
-                # Get indices for this index.
-                indices = np.memmap(mode="r", 
-                                    shape=(config["kdtree_maximum_points"], ),
-                                    offset=index * indices_bpr,
-                                    **indices_kwds)
-
-                if not any(fp > 0):
-                    # No indices. Skip.
-                    # TODO: update output file with nans at this row?
-                    break
-                
-                
-                S, p_opt = optimize_npm_at_point(index,
-                                                 indices,
-                                                 data,
-                                                 config)
-
-                # Select a new point to run on.
-                index = select_next_point(indices[1 + S:], data, config)
-
-                if index is None:
-                    logging.info("All nearby swarm points are done! "\
-                                 "Selecting new point to start from.")
-                    break # out to the generator
+pool.join()
+pool.close()
 
 
