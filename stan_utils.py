@@ -9,7 +9,8 @@ import pystan.plots as plots
 __all__ = ["load_stan_model", "sampling_kwds", "plots"]
 
 
-def load_stan_model(path, cached_path=None, recompile=False, overwrite=True):
+def load_stan_model(path, cached_path=None, recompile=False, overwrite=True,
+    verbose=True):
     r"""
     Load a Stan model from a file. If a cached file exists, use it by default.
 
@@ -36,13 +37,15 @@ def load_stan_model(path, cached_path=None, recompile=False, overwrite=True):
             model = pickle.load(fp)
 
         if model.model_code != model_code:
-            logging.warn("Cached model at {} differs from the code in {}; "\
-                         "recompiling model".format(cached_path, path))
+            if verbose:
+                logging.warn("Cached model at {} differs from the code in {}; "\
+                             "recompiling model".format(cached_path, path))
             recompile = True
             continue
 
         else:
-            logging.info("Using pre-compiled model from {}".format(cached_path)) 
+            if verbose:
+                logging.info("Using pre-compiled model from {}".format(cached_path)) 
             break
 
     else:
