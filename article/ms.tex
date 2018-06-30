@@ -40,7 +40,7 @@
 
 \begin{document}
 
-\title{Detection and characterisation of stellar multiplicity with Gaia}
+\title{Detection and partial characterisation of stellar multiplicity with Gaia}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -143,7 +143,6 @@ properties. Here we describe the absence of reported radial velocity in
 our model that incorporates measurements of radial velocity, astrometry, 
 and photometry, to detect and characterise stellar multiples.
 
-
 \subsection{SB2 Systems: Double-lined spectroscopic binaries}
 \label{sec:sb2_methods}
 
@@ -223,7 +222,7 @@ complex (unknown) function of parameter space.
 		     the radial velocity completeness is approximately flat.
 		     We flag sources within this range that do not have reported 
 		     radial velocities to be candidate SB2 systems.}
-    \label{fig:radial_velocity_completeness}
+    \label{fig:sb2_rvs_completeness}
 \end{figure*}
 
 
@@ -242,17 +241,19 @@ complex (unknown) function of parameter space.
 
 
 
+\begin{figure*}
+	\includegraphics[width=1.0\textwidth,height=3.0in]{../figures/todo.png}
+    \caption{Hertzsprung-Russell diagram of X \Gaia\ sources that are in the
+    		 ranges specified in Equation \ref{eq:rvs_parameter_ranges} (gray).
+		 	 Overlaid in colour we show the SB2 candidates we deduce by the
+			 absence of reported radial velocity.}
+    \label{fig:sb2_hrd}
+\end{figure*}
 
-% Figure: radial velocity completeness as a function of pertinent properties
-% 		  with the range that we have said is "fully complete"
-
-% Figure: h-r diagram of SB2 binary fraction
 
 % Figure: cross-match against a catalog of SB2 systems,... do we find all of
 % 		  what they find from SB2 deductive inference alone? or do we miss
 % 		  some SB2s in some parameter range?
-
-% Figure: radial veloci
 
 
 \subsection{SB1 Systems: Single-lined spectroscopic binaries}
@@ -464,52 +465,30 @@ from others}
 \subsubsection*{Step 3: Evaluating probability and system properties}
 
  
-\todo{selecting similar sources}
+\todo{Bayes factors for each dimension?}
 
-\todo{fitting the two-component model}
+\todo{source properties: semi-amplitude (easy)}
 
-\todo{evaluating probability}
-
-\todo{calculating source properties}
+\todo{Can we recover period and eccentricity using The Joker?}
 
 
 
 
-
-In principle for well-sampled circular orbits this model would allow us to
-identify binary star systems with orbital periods at least up to twice the observing
-span in the second \Gaia\ data release ($\approx$21 months observing span; 
-allowing for well-characterised detections for systems with orbital periods up to $\approx$44 months). 
-
-For higher-order star systems with longer periods, we can still find that a
-stellar multiple system is more likely than a single star scenario, but our
-estimate of the orbital properties (e.g., the semi-amplitude $K$) will be biased
-to lower values because we have not fully sampled half of the orbital period.
-At even longer orbital periods, or for stellar multiples with mass ratios that
-produce a small velocity semi-amplitude $K$, under our assumptions these systems 
-may be classified as single-star systems because the intrinsic radial velocity variation is within the expected 
-variations for single stars of a similar apparent magnitude and colour. We 
-revisit this issue in Section \ref{sec:sb_limits}, where we explicitly define 
-the probability that a \Gaia\ source is a SB1-type system $p(\textrm{SB1}|y)$ 
-within defined limits of orbital period (and other orbital and source parameters). 
-Outside of this parameter range, we are insensitive to distinguishing single-star 
-systems from higher-order SB1-type systems.
-
-% Model fitting.
-
-% Figure: fitting the radial velocity variance as a function of stellar properties.
-
-% Figures: Binarity as a function of source properties.
-
-% Figure: h-r diagram of SB1 binary fraction
+%For higher-order star systems with longer periods, we can still find that a
+%stellar multiple system is more likely than a single star scenario, but our
+%estimate of the orbital properties (e.g., the semi-amplitude $K$) will be biased
+%to lower values because we have not fully sampled half of the orbital period.
+%At even longer orbital periods, or for stellar multiples with mass ratios that
+%produce a small velocity semi-amplitude $K$, under our assumptions these systems 
+%may be classified as single-star systems because the intrinsic radial velocity variation is within the expected 
+%variations for single stars of a similar apparent magnitude and colour. We 
+%revisit this issue in Section \ref{sec:sb_limits}, where we explicitly define 
+%the probability that a \Gaia\ source is a SB1-type system $p(\textrm{SB1}|y)$ 
+%within defined limits of orbital period (and other orbital and source parameters). 
+%Outside of this parameter range, we are insensitive to distinguishing single-star 
+%systems from higher-order SB1-type systems.
 
 
-% Figure: histogram of binaries as a fucntion of the Rv excess
-
-
-
-ty fraction as a function of galactic latitude and
-% 		  longitude
 
 
 
@@ -558,80 +537,19 @@ apparent magnitude (and preferably, absolute magnitude).
 
 
 
-\begin{figure*}
-	\includegraphics[width=1.0\textwidth]{../figures/todo.png}
-    \caption{Source radial velocity variance shown with respect to flux in
-    the \Gaia\ BP, G, and RP bands. The source radial velocity variance 
-    most closely follows the RP flux as it is closer to the \Gaia\ RVS
-    band.}
-\end{figure*}
 
-\begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
-    \caption{Source mean \Gaia\ RP flux and radial velocity variance.
-    Points are represented by their mean $BP-RP$ color, confirming that
-    there is some color dependency on the source radial velocity variance.}
-    \label{fig:rp-flux-color}
-\end{figure}
-
-
-\begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
-    \caption{Mixture model fitted.}
-    \label{fig:mixture-model}
-\end{figure}
-
-
-
-\begin{figure}
-	\includegraphics[width=0.5\textwidth]{../figures/todo.png}
-    \caption{Detected binary fraction as a function of the mean RP flux
-    (top panels), the $BP-RP$ color (second panels), the number of 
-    radial velocity transits (third panels), and the inferred temperature
-    (bottom panels). No trend is observed with mean RP flux or the number 
-    of radial velocity transits. However, our model finds bluer (hotter)
-    stars are more likely to be binaries, despite including color as a
-    dependency in our model.}
-    \label{fig:binary-fraction-wrt-params}
-\end{figure}
-
-
-
-
-
-\begin{itemize}
-
-\item CALIBRATION SAMPLE (including ADQL query)
-
-\item Fitting the model:
-
-\item Comparisons of residuals with other stellar properties.
-
-\item What is the RV error that Gaia can measure in a single epoch for a given magnitude vs colour, etc. 
-
-\item What are the distributions of orbital parameters of binary systems that we would be able to detect?
-
-\item Calculating a probability of binarity for every star, taking the non-measurements into account!
-
-\item Completeness cuts,.... selection effects?
-
-\end{itemize}
 
 \section{Results}
 
+\section{Discussion} \label{sec:discussion}
+
 
 \begin{itemize}
-
-\item Binary fraction in the spaces that we were fitting: rp flux, colour, etc, just showing the transition of  probabilities
-
-\item Binary fraction as a function of fitting properties, and other stellar properties from Gaia
-
-\item Binarity across the H-R diagram
-
-\item Binarity with metallicity 
+	\item \todo{Binary fraction in the spaces that we were fitting: rp flux, colour, etc, just showing the transition of  probabilities}
+	\item \todo{Binary fraction as a function of fitting properties (e.g., colour, absolute RP mag, apparent RP mag)}
+	\item \todo{Binarity across the H-R diagram}
+	\item \todo{What are the distributions of orbital parameters of binary systems that we would be able to detect?}
 \end{itemize}
-
-\section{Discussion} \label{sec:discussion}
 
 \subsection{Comparison with \citet{El-Badry:2018}}
 
@@ -644,8 +562,7 @@ apparent magnitude (and preferably, absolute magnitude).
 \subsection{Comparison with \citet{Price-Whelan:2018}}
 
 \begin{itemize}
-    \item \todo{binarity with metallicity}
-    \item \todo{binarity across the H-R diagram}
+	\item \todo{Binarity with metallicity }
     \item \todo{binarity in clusters vs the field?}
     \item \todo{binarity among extremely metal-poor stars?}
 \end{itemize}
@@ -681,6 +598,24 @@ funded by the ``Plan Estatal de Investigaci\'on Científica y T\'ecnica y de
 Innovaci\'on'' program of the Spanish government.
 
 
+\appendix
+\section{Reproducibility}
+This project was developed in a \texttt{git} repository that is publicly
+accessible at \url{https://github.com/andycasey/velociraptor}. The repository
+includes notebooks that detail our work, \LaTeX\ to compile this manuscript, 
+and scripts to reproduce our analysis in its entirety. Reproducing this work in 
+full will require at least \todo{X}\,Gb of disk space and \todo{Y}\,compute hours.
+To reproduce this work (including data retrieval, analysis, production of figures,
+and manuscript compilation) use the \todo{following commands on a modern terminal}:
+
+
+
+\section{Relevant Astronomical Data Query Language (ADQL) queries}
+\todo{Include relevant ADQL queries}
+
+
+\section{Radial velocity completeness as a function of \Gaia\ source properties}
+\todo{Figures}
 
 
 \software{
