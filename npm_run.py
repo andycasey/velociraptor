@@ -129,7 +129,7 @@ def swarm(*indices, queue=None):
 
 
 
-P = 8 # mp.cpu_count()
+P = 4 # mp.cpu_count()
 
 with mp.Pool(processes=P) as pool:
 
