@@ -15,8 +15,8 @@ parameters {
 transformed parameters {
     real mu_multiple[D];
 
-    # Bound the log-normal such that at most 10% of the support is at the mean
-    # of the normal.
+    // Bound the log-normal such that at most 10% of the support is at the mean
+    // of the normal.
     {
         real min_support;
         real min_mode;

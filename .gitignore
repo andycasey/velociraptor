@@ -6,6 +6,7 @@ notebooks/.ipynb_checkpoints/
 
 *.pkl
 *.pickle
+*.memmap
 data/*.fits*
 data/*.csv
 figures/*.pdf

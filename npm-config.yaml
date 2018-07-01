@@ -28,8 +28,6 @@ predictor_label_names:
  #- rv_abs_diff_template_teff
  #- phot_rp_variability
 
-#optimisation_strategy: swarm
-#initialisation_strategy: swarm
 share_optimised_result_with_nearest: 8
 
 optimisation_kwds:

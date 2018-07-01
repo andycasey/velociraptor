@@ -7,6 +7,8 @@ import multiprocessing as mp
 import yaml
 from astropy.io import fits
 import tqdm
+import logging
+from time import sleep
 
 import npm_utils as npm
 import stan_utils as stan
@@ -57,14 +59,23 @@ for key in ("tol_obj", "tol_grad", "tol_rel_grad", "tol_rel_obj"):
 
 
 done = np.zeros(N, dtype=bool)
+queued = np.zeros(N, dtype=bool)
 results = np.nan * np.ones((N, L), dtype=float)
 
+indices_bpr = config["kdtree_maximum_points"] * np.dtype(np.int32).itemsize
 
 
 def optimize_mixture_model(index, init=None):
 
     # Select indices and get data.
     indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
+    """
+    with open(config["indices_path"], "br") as indices_fd:
+        indices_fd.seek(indices_bpr * index)
+        indices = np.fromfile(indices_fd, dtype=np.int32,
+                              count=config["kdtree_maximum_points"])
+    """
+
     y = np.array([data[ln][indices] for ln in config["predictor_label_names"]]).T
     
     if init is None:
@@ -85,64 +96,150 @@ def optimize_mixture_model(index, init=None):
 
 
 
-def swarm(*indices, queue=None):
+def swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None, 
+    out_queue=None):
 
-    init = [None]
-    for index in indices:
+    def _random_index():
+        yield from np.random.choice(indices, max_random_starts, replace=False)
 
-        while True:
-            _, result, kdt_indices = optimize_mixture_model(index, init.pop(0))
+    _ri = _random_index()
+    random_start = lambda *_: (_ri.__next__(), None)
 
-            if queue is not None:
-                queue.put(1)
+    swarm = True
 
-            # Check to see which kdt_indices have not been done.
-            done[index] = True
+    while swarm:
 
-            if result is None:
-                # We will say this point is 'done', even though result failed.
-                break
+        for func in (in_queue.get_nowait, random_start):
+            try:
+                index, init = func()
 
-            results[index] = npm._pack_params(**result)
+            except mp.queues.Empty:
+                logging.info("Using a random index to start")
+                continue
 
-            if C > 0:
-                # Assign the closest points to have the same result.
-                B = sum(done[kdt_indices[:C + 1]])
-                done[kdt_indices[:C + 1]] = True
-                results[kdt_indices[:C + 1]] = results[index]
-
-                if queue is not None:
-                    queue.put(C + 1 - B)
-
-            next_indices = kdt_indices[(~done * finite)[kdt_indices]]
-            if len(next_indices) > 0:
-                # Initialize the next point from this optimized result.
-                index = next_indices[0]
-                init.append(result)
-
+            except StopIteration:
+                logging.warning("Swarm is bored")
+                sleep(5)
+                
+            except:
+                logging.exception("Unexpected exception:")
+                swarm = False
+                
             else:
-                # All points in the ball were done.
-                init.append(None)
-                break
+                if index is None and init is False:
+                    swarm = False
+                    break
+
+                _, result, kdt_indices = optimize_mixture_model(index, init)
+
+                out_queue.put((index, result))
+
+                if result is not None:
+                    if C > 0:
+                        # Assign the closest points to have the same result.
+                        # (On the other end of the out_qeue we will deal with 
+                        # multiple results.)
+                        out_queue.put((kdt_indices[:C + 1], result))
+
+                    # Candidate next K points
+                    K = 10
+                    candidate_queue.put((kdt_indices[C + 1:C + 1 + K], result))
+
+            break
 
     return None
 
 
 
-P = 4 # mp.cpu_count()
+P = 20 # mp.cpu_count()
 
 with mp.Pool(processes=P) as pool:
 
-    queue = mp.Manager().Queue()
+    manager = mp.Manager()
+    
+    in_queue = manager.Queue()
+    candidate_queue = manager.Queue()
+    out_queue = manager.Queue()
+
+    swarm_kwds = dict(max_random_starts=10,
+                      in_queue=in_queue, 
+                      out_queue=out_queue,
+                      candidate_queue=candidate_queue)
 
     j = []
     for _ in range(P):
-        j.append(pool.apply_async(swarm,
-                                  np.random.choice(finite_indices, F, False),
-                                  kwds=dict(queue=queue)))
+        j.append(pool.apply_async(swarm, finite_indices, kwds=swarm_kwds))
 
-    # Collect the results from the workers so that we get an accurate idea of
-    # the progress.
+    # The swarm will just run at random initial points until we communicate
+    # back that the candidates are good.
+
     with tqdm.tqdm(total=F) as pbar:
-        for _ in range(F):
-            pbar.update(queue.get(timeout=30))
+
+        while True:
+
+            has_candidates, has_results = (True, True)
+
+            # Check for candidates.
+            try:
+                r = candidate_queue.get_nowait()
+
+            except mp.queues.Empty:
+                has_candidates = False
+
+            else:
+                candidate_indices, init = r
+                candidate_indices = np.atleast_1d(candidate_indices)
+
+                for index in candidate_indices:
+                    if not done[index] and not queued[index] and finite[index]:
+                        in_queue.put((index, init))
+                        queued[index] = True
+
+            # Add indices to the queue that have not been done yet so that the
+            # swarm does not get bored and start using random indices?
+
+            #print("approximate queue sizes: {} {} {}".format(
+            #    in_queue.qsize(), candidate_queue.qsize(), out_queue.qsize()))
+
+            # If the number of items in the in_queue reaches less than 50%,
+            # and we have already processed 50% of the sources,
+            # then we should be adding items,... right?
+
+            # Or we just do a cleean up afterwards.
+
+
+            # Check for output.
+            try:
+                r = out_queue.get(timeout=5)
+
+            except mp.queues.Empty:
+                has_results = False
+
+            else:
+                index, result = r
+                index = np.atleast_1d(index)
+
+                updated = index.size - sum(done[index])
+                done[index] = True
+                if result is not None:
+                    results[index] = npm._pack_params(**result)
+                    pbar.update(updated)
+
+            if not has_candidates and not has_results: 
+                break
+
+        # Do a check for entries that are not done.
+        not_done = np.where((~done * finite))[0]
+        logging.info("{} not done".format(len(not_done)))
+        for index in not_done:
+
+            # Get nearest points that are done.
+            with open(config["indices_path"], "br") as indices_fd:
+                indices_fd.seek(indices_bpr * index)
+                indices = np.fromfile(indices_fd, dtype=np.int32,
+                                      count=config["kdtree_maximum_points"])
+
+
+            in_queue.put((index, results[indices[done[indices]][0]]))
+
+
