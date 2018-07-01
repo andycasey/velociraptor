@@ -30,7 +30,7 @@ predictor_label_names:
 
 #optimisation_strategy: swarm
 #initialisation_strategy: swarm
-share_optimised_result_with_nearest: 8
+share_optimised_result_with_nearest: 0
 
 optimisation_kwds:
   verbose: false
