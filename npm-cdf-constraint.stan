@@ -27,7 +27,7 @@ transformed parameters {
             min_support = log(mu_single[d]) + 1.263404 * sigma_multiple[d];
             min_mode = log(mu_single[d] + 1 * sigma_single[d]) + pow(sigma_multiple[d], 2);
 
-            bound_lower = max([min_mode, min_support]);
+            bound_lower = fmax(min_mode, min_support);
             bound_upper = log(mu_single[d] + 5 * sigma_single[d]) + pow(sigma_multiple[d], 2);
             mu_multiple[d] = bound_lower + mu_multiple_uv[d] * (bound_upper - bound_lower);
         }

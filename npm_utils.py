@@ -261,7 +261,7 @@ def ln_likelihood(y, theta, s_mu, s_sigma, b_mu, b_sigma):
     ll = np.sum(s_lpdf) + np.sum(b_lpdf)
     #print(lpdf)
     
-    assert np.isfinite(ll)
+    #assert np.isfinite(ll)
     return ll
 
 
@@ -308,6 +308,10 @@ def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple, **
     return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple])
 
 
+def _check_params_dict(d):
+    for k in ("mu_single", "sigma_single", "mu_multiple", "sigma_multiple", "mu_multiple_uv"):
+        d[k] = np.atleast_1d(d[k])
+    return d
 
 
 def nlp(params, y, L):
