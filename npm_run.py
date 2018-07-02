@@ -4,11 +4,12 @@
 import numpy as np
 import os
 import multiprocessing as mp
+import pickle
 import yaml
-from astropy.io import fits
 import tqdm
 import logging
 from time import sleep
+from astropy.io import fits
 
 import npm_utils as npm
 import stan_utils as stan
@@ -228,18 +229,92 @@ with mp.Pool(processes=P) as pool:
             if not has_candidates and not has_results: 
                 break
 
-        # Do a check for entries that are not done.
-        not_done = np.where((~done * finite))[0]
-        logging.info("{} not done".format(len(not_done)))
-        for index in not_done:
 
-            # Get nearest points that are done.
-            with open(config["indices_path"], "br") as indices_fd:
-                indices_fd.seek(indices_bpr * index)
-                indices = np.fromfile(indices_fd, dtype=np.int32,
-                                      count=config["kdtree_maximum_points"])
+# Clean up any difficult cases.
+with mp.Pool(processes=P) as pool:
+
+    manager = mp.Manager()
+    
+    in_queue = manager.Queue()
+    candidate_queue = manager.Queue()
+    out_queue = manager.Queue()
+
+    swarm_kwds = dict(max_random_starts=0,
+                      in_queue=in_queue, 
+                      out_queue=out_queue,
+                      candidate_queue=candidate_queue)
+
+    # Do a check for entries that are not done.
+    not_done = np.where((~done * finite))[0]
+    ND = not_done.size
+
+    logging.info("{} not done".format(ND))
+    for index in not_done:
+
+        # Get nearest points that are done.
+        with open(config["indices_path"], "br") as indices_fd:
+            indices_fd.seek(indices_bpr * index)
+            indices = np.fromfile(indices_fd, dtype=np.int32,
+                                  count=config["kdtree_maximum_points"])
+
+        in_queue.put((index, results[indices[done[indices]][0]]))
+
+    j = []
+    for _ in range(P):
+        j.append(pool.apply_async(swarm, finite_indices, kwds=swarm_kwds))
 
 
-            in_queue.put((index, results[indices[done[indices]][0]]))
+    with tqdm.tqdm(total=ND) as pbar:
+
+        while True:
+
+            has_candidates, has_results = (True, True)
+
+            # Check for candidates.
+            try:
+                r = candidate_queue.get_nowait()
+
+            except mp.queues.Empty:
+                has_candidates = False
+
+            else:
+                candidate_indices, init = r
+                candidate_indices = np.atleast_1d(candidate_indices)
+
+                for index in candidate_indices:
+                    if not done[index] and not queued[index] and finite[index]:
+                        in_queue.put((index, init))
+                        queued[index] = True
+
+            # Check for output.
+            try:
+                r = out_queue.get(timeout=5)
+
+            except mp.queues.Empty:
+                has_results = False
+
+            else:
+                index, result = r
+                index = np.atleast_1d(index)
+
+                updated = index.size - sum(done[index])
+                done[index] = True
+                if result is not None:
+                    results[index] = npm._pack_params(**result)
+                    pbar.update(updated)
+
+            if not has_candidates and not has_results: 
+                sleep(1)
+                # Do a check for entries that are not done.
+                not_done = np.where((~done * finite))[0]
+                ND = not_done.size
+
+                if ND == 0:
+                    break
 
 
+results_path = config.get("results_path", "results.pkl")
+with open(results_path, "wb") as fp:
+    pickle.dump(results, fp, -1)
+
+logging.info("Results written to {}".format(results_path))
