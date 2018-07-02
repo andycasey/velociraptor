@@ -215,7 +215,7 @@ complex (unknown) function of parameter space.
 
 
 \begin{figure*}
-	\includegraphics[width=1.0\textwidth]{../figures/todo.png}
+	\includegraphics[width=1.0\textwidth]{../figures/sb2_rvs_completeness.pdf}
     \caption{Fraction of \Gaia\ sources with reported radial velocities
 		     as a function of source properties. Within the adopted source
 		     parameter ranges (gray; see Section \ref{sec:sb2_methods})
@@ -228,26 +228,37 @@ complex (unknown) function of parameter space.
 
 
 
-\begin{figure*}
-	\includegraphics[width=1.0\textwidth,height=3.0in]{../figures/todo.png}
+\begin{figure}
+	\includegraphics[width=0.4\textwidth]{../figures/sb2_histograms.pdf}
     \caption{Distribution of 
-    			(a) photometric \bp\ - \rp\ excess factor, 
-				(b) astrometric unit weight error, 
-					and 
-				(c) photometric variability
-			of candidate SB2 type systems relative to a control sample.}
+    			(a) astrometric unit weight error (see Eq. \ref{eq:astrometric_unit_weight_error}),
+			%$u = \left(\chi_{al}^2/(N_{al} - 5)\right)^{1/2}$
+			%		where $\chi_{al}^2$ and $N_{al}$ is the astrometric goodness-of-fit and number 
+			%		of observations in the along-scan direction, respectively (columns 
+			%			\texttt{astrometric\_chi2\_al} and \texttt{astrometric\_n\_obs\_al}), 
+				(b) photometric \bp\ - \rp\ excess factor, 				
+	 				and 
+				(c) photometric \rp\ variability (see Eq. \ref{eq:photometric_variability})
+			of candidate SB2 type systems relative to a control sample of the same size.}
     \label{fig:sb2_histograms}
-\end{figure*}
+\end{figure}
 
 
 
 \begin{figure*}
-	\includegraphics[width=1.0\textwidth,height=3.0in]{../figures/todo.png}
-    \caption{Hertzsprung-Russell diagram of X \Gaia\ sources that are in the
-    		 ranges specified in Equation \ref{eq:rvs_parameter_ranges} (gray).
-		 	 Overlaid in colour we show the SB2 candidates we deduce by the
-			 absence of reported radial velocity.}
-    \label{fig:sb2_hrd}
+	\includegraphics[width=1.0\textwidth]{../figures/sb2_sky_structure.pdf}
+    \caption{Fraction of sources (per sky bin) without reported radial velocities
+    		 for all sources with $G \lesssim 13$ (top) and sources in the ranges
+		 	 specified by Eqs \ref{eq:sb2_ranges} (bottom), where we assert that a missing
+			 radial velocity measurement signifies a likely SB2 candidate . The color scale is 
+			 arbitrarily set to highlight structure, where black indicates a higher
+			 fraction of sources do not have reported radial velocities. Crowding
+			 in the galactic plane likely results in some sources not having radial
+			 velocities reported. The large scale structure visible in both axes is
+			 a combined effect of the initial \Gaia\ source list, the scanning law,
+			 and star forming regions (i.e., where emission in the \ion{Ca}{2} 
+			 triplet likely causes issues for radial velocity determination).}
+    \label{fig:sb2_sky_structure}
 \end{figure*}
 
 
@@ -518,7 +529,7 @@ processing of the second \Gaia\ data release \citep[e.g., see Appendix A1 of ][]
 that resulted in 80\% of sources having zero astrometric excess noise,
 we instead make use of the astrometric unit weight error $u$
 \begin{eqnarray}
-	u = \sqrt{\frac{\chi^2_{al}}{N_{obs,al} - 5}}
+	u = \sqrt{\frac{\chi^2_{al}}{N_{obs,al} - 5}} \label{eq:astrometric_unit_weight_error}
 \end{eqnarray}
 \noindent{}where $\chi^2_{al}$ is the astrometric $\chi^2$ value
 in the along-scan direction (column \texttt{astrometric\_chi2\_al}) and 
@@ -534,7 +545,12 @@ apparent magnitude (and preferably, absolute magnitude).
 
 \subsection{Photometric binaries} \label{sec:method_photometric_binaries}
 
+\todo{bp rp excess factor}
 
+
+\begin{eqnarray}
+	\textrm{Amp} = \log_{10}\left(\sqrt{N_{obs,al}}\frac{\sigma_{\langle{}f_G\rangle}}{\langle{}f_G\rangle}\right) \label{eq:photometric_variability}
+\end{eqnarray}
 
 
 

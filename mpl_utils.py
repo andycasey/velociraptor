@@ -33,7 +33,7 @@ mpl_style = {
 
     # Axes
     'axes.facecolor': '#FFFFFF',
-    'axes.edgecolor': '#AAAAAA',
+    'axes.edgecolor': '#333333',
     'axes.linewidth': 1.0,
     'axes.grid': False,
     'axes.titlesize': 'x-large',
@@ -46,13 +46,13 @@ mpl_style = {
     'xtick.minor.size': 4,
     'xtick.major.pad': 6,
     'xtick.minor.pad': 6,
-    'xtick.color': '#565656',
+    'xtick.color': '#333333',
     'xtick.direction': 'in',
     'ytick.major.size': 8,
     'ytick.minor.size': 4,
     'ytick.major.pad': 6,
     'ytick.minor.pad': 6,
-    'ytick.color': '#565656',
+    'ytick.color': '#333333',
     'ytick.direction': 'in',
     'xtick.labelsize': 'medium',
     'ytick.labelsize': 'medium',
@@ -74,7 +74,7 @@ mpl_style = {
 
 
 
-def plot_histogram_steps(ax, x_bins, y, y_err):
+def plot_histogram_steps(ax, x_bins, y, y_err, **kwargs):
 
     xx = np.array(x_bins).repeat(2)[1:]
     xstep = np.repeat((x_bins[1:] - x_bins[:-1]), 2)
@@ -86,7 +86,7 @@ def plot_histogram_steps(ax, x_bins, y, y_err):
 
     #xbc = x_bins[:-1] + 0.5 * np.diff(x_bins)
 
-    _ = ax.plot(xx, yy, '-')
+    _ = ax.plot(xx, yy, '-', **kwargs)
     ax.errorbar(x_bins, y, y_err, fmt=None, capsize=0, ecolor=_[0].get_color())
 
     return (xx, yy)
