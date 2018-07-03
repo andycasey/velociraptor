@@ -145,7 +145,7 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
             N, D = kdtree.data.shape
             left, right = (minimum_radius_norm, maximum_radius_norm)
 
-            Q = kwargs.get("Q", 1000) # MAGIC HACK
+            Q = kwargs.get("Q", 10) # MAGIC HACK
  
             # MAGIC HACK
             tolerance = maximum_points if maximum_points is not None \
@@ -153,6 +153,7 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
 
             while True:
                 # Shrink it.
+
                 ri = np.logspace(np.log10(left), np.log10(right), Q)
 
                 counts = kdtree.two_point_correlation(point, ri)
@@ -166,9 +167,8 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
                 left, right = (ri[indices[0] - 1], ri[indices[1]])
 
                 if np.diff(counts[indices]).max() < tolerance:
+                    radius_norm = ri[indices[0]]
                     break
-
-            radius_norm = left
 
         # two_point_correlation(point, minimum_radius_norm)
         #   is eequivalent to
