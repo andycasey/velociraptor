@@ -33,14 +33,16 @@ F = finite_indices.size
 L = 4 * len(config["predictor_label_names"]) + 1
 C = config.get("share_optimised_result_with_nearest", 0)
 
-kdt, scale, offset = npm.build_kdtree(X[finite], 
+kdt, scales, offsets = npm.build_kdtree(X[finite], 
     relative_scales=config.get("kdtree_relative_scales", None))
 
-kdt_kwds = dict(offset=offset, scale=scale, full_output=False)
+kdt_kwds = dict(offsets=offsets, scales=scales, full_output=False)
 kdt_kwds.update(
     minimum_radius=config.get("kdtree_minimum_radius", None), # DEFAULT
     minimum_points=config.get("kdtree_minimum_points", 1024), # DEFAULT
-    maximum_points=config.get("kdtree_maximum_points", 8192)) # DEFAULT
+    maximum_points=config.get("kdtree_maximum_points", 8192),
+    minimum_density=config.get("minimum_density", None)
+    ) # DEFAULT
 
 model = stan.load_stan_model(config["model_path"], verbose=False)
 
@@ -63,19 +65,13 @@ done = np.zeros(N, dtype=bool)
 queued = np.zeros(N, dtype=bool)
 results = np.nan * np.ones((N, L), dtype=float)
 
-indices_bpr = config["kdtree_maximum_points"] * np.dtype(np.int32).itemsize
+default_init = np.array([0.6985507, 3.0525788, 1.1474566, 1.8999833, 0.6495420])
 
 
 def optimize_mixture_model(index, init=None):
 
     # Select indices and get data.
     indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
-    """
-    with open(config["indices_path"], "br") as indices_fd:
-        indices_fd.seek(indices_bpr * index)
-        indices = np.fromfile(indices_fd, dtype=np.int32,
-                              count=config["kdtree_maximum_points"])
-    """
 
     y = np.array([data[ln][indices] for ln in config["predictor_label_names"]]).T
     
@@ -104,7 +100,7 @@ def swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
         yield from np.random.choice(indices, max_random_starts, replace=False)
 
     _ri = _random_index()
-    random_start = lambda *_: (_ri.__next__(), None)
+    random_start = lambda *_: (_ri.__next__(), default_init)
 
     swarm = True
 
@@ -154,6 +150,10 @@ def swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
 
 P = 20 # mp.cpu_count()
 
+# Only do giant stars for now, as a test,...
+do_indices = np.where(finite * (data["absolute_rp_mag"] < 1))[0]
+D = do_indices.size
+
 with mp.Pool(processes=P) as pool:
 
     manager = mp.Manager()
@@ -169,12 +169,12 @@ with mp.Pool(processes=P) as pool:
 
     j = []
     for _ in range(P):
-        j.append(pool.apply_async(swarm, finite_indices, kwds=swarm_kwds))
+        j.append(pool.apply_async(swarm, do_indices, kwds=swarm_kwds))
 
     # The swarm will just run at random initial points until we communicate
     # back that the candidates are good.
 
-    with tqdm.tqdm(total=F) as pbar:
+    with tqdm.tqdm(total=D) as pbar:
 
         while True:
 
@@ -195,18 +195,6 @@ with mp.Pool(processes=P) as pool:
                     if not done[index] and not queued[index] and finite[index]:
                         in_queue.put((index, init))
                         queued[index] = True
-
-            # Add indices to the queue that have not been done yet so that the
-            # swarm does not get bored and start using random indices?
-
-            #print("approximate queue sizes: {} {} {}".format(
-            #    in_queue.qsize(), candidate_queue.qsize(), out_queue.qsize()))
-
-            # If the number of items in the in_queue reaches less than 50%,
-            # and we have already processed 50% of the sources,
-            # then we should be adding items,... right?
-
-            # Or we just do a cleean up afterwards.
 
 
             # Check for output.
@@ -230,6 +218,8 @@ with mp.Pool(processes=P) as pool:
                 break
 
 
+raise a
+
 # Clean up any difficult cases.
 with mp.Pool(processes=P) as pool:
 
@@ -252,11 +242,7 @@ with mp.Pool(processes=P) as pool:
     for index in not_done:
 
         # Get nearest points that are done.
-        with open(config["indices_path"], "br") as indices_fd:
-            indices_fd.seek(indices_bpr * index)
-            indices = np.fromfile(indices_fd, dtype=np.int32,
-                                  count=config["kdtree_maximum_points"])
-
+        indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
         in_queue.put((index, results[indices[done[indices]][0]]))
 
     j = []

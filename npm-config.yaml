@@ -1,6 +1,6 @@
 data_path: data/gaia-sources-for-npm-colsubset.fits
 output_data_path: /media/acas0005/muon/velociraptor/npm-output.fits
-results_path: results.memmap
+results_path: results/rv_single_epoch_scatter+elastic_ball.pkl
 indices_path: indices.memmap
 results_suffix:
 model_path: npm-cdf-constraint.stan
@@ -20,6 +20,7 @@ kdtree_minimum_radius:
  - 0.05
  - 0.50
  - 0.50
+kdtree_minimum_density: 5000
 
 predictor_label_names:
  - rv_single_epoch_scatter

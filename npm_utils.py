@@ -44,8 +44,11 @@ def build_kdtree(X, relative_scales=None,**kwargs):
     return (kdt, relative_scales, offset)
 
 
-def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None, 
-    minimum_points=1, maximum_points=None, dualtree=False, full_output=False):
+
+
+def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None, 
+    minimum_points=1, maximum_points=None, minimum_density=None, dualtree=False,
+    full_output=False, **kwargs):
     """
     Query around a point in the KD-Tree until certain conditions are met (e.g.,
     the number of points in the ball, and the minimum radius that the ball
@@ -57,17 +60,28 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None,
     :param point:
         The (unscaled) point to query around.
 
-    :param offset: [optional]
-        The offset to apply to the query point.
+    :param offsets: [optional]
+        The offsets to apply to the query point.
 
-    :param scale: [optional]
-        The scaling to apply to the query point, after subtracting the offset.
+    :param scales: [optional]
+        The scaling to apply to the query point, after subtracting the offsets.
+
+    :param minimum_radius: [optional]
+        The minimum radius (or radii) that the ball must extend to.
 
     :param minimum_points: [optional]
         The minimum number of points to return in the ball.
 
-    :param minimum_radius: [optional]
-        The minimum radius (or radii) that the ball must extend to.
+    :param maximum_points: [optional]
+        The maximum number of points to return in the ball. If the number of
+        points returned exceeds this value, then a random subset of the points
+        will be returned.
+
+    :param minimum_density: [optional]
+        The minimum average density of points per dimension for the ball. This
+        can be useful to ensure that points that are in the edge of the k-d tree
+        parameter space will be compared against points that are representative
+        of the underlying space, and not just compared against nearest outliers.
 
     :param dualtree: [optional]
         Use the dual tree formalism for the query: a tree is built for the query
@@ -79,67 +93,82 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None,
         the indicies, otherwise just return the indices.
     """
 
-    point_orig = np.atleast_1d(point).reshape(1, -1)
-    point = (point_orig - offset)/scale
-    N, D = kdtree.data.shape
+    offsets = np.atleast_1d(offsets)
+    scales = np.atleast_1d(scales)
 
-    if minimum_radius is None or np.max(minimum_radius) <= 0:
+    point_orig = np.atleast_1d(point).reshape(1, -1)
+    point = (point_orig - offsets)/scales
+
+    # Simple case.
+    if minimum_radius is None and minimum_density is None:
         # We can just query the nearest number of points.
         d, indices = kdtree.query(point, k=minimum_points, 
             sort_results=True, return_distance=True, dualtree=dualtree)
 
     else:
-        # What (scaled) radius do we need to go out to?
+        # We need to find the minimum radius that meets our constraints.
+        if minimum_radius is None: 
+            minimum_radius = 0
+
+        if minimum_density is None:
+            minimum_density = 0
+
         minimum_radius = np.atleast_1d(minimum_radius)
-        if minimum_radius.size == 1:
-            minimum_radius = np.ones(D) * minimum_radius
+        minimum_density = np.atleast_1d(minimum_density)
+        
+        # Need to scale the minimum radius from the label space to the normalised
+        # k-d tree space.
+        minimum_radius_norm = np.max(minimum_radius / np.atleast_1d(scales))
 
-        else:
-            assert minimum_radius.size == D, \
-                "minimum radius dimensions must match the data dimensions"
+        K = kdtree.two_point_correlation(point, minimum_radius_norm)[0]
 
-        # What normalised scale is this?
-        min_radius = np.max(minimum_radius/scale)
+        # "density" = N/(2*R)
+        # if N > 2 * R * density then our density constraint is met
+        K_min = np.max(np.hstack([
+            minimum_points, 
+            2 * minimum_density * minimum_radius
+        ]))
 
         # Check that the minimum radius norm will also meet our minimum number
         # of points constraint. Otherwise, we need to use two point
         # auto-correlation functions to see how far to go out to.
-        K = kdtree.two_point_correlation(point, min_radius)
-        if minimum_points is not None and K < minimum_points:
+        if K >= K_min:
+            # All constraints met.
+            radius_norm = minimum_radius_norm
 
-            # If the KD-tree is normalised correctly then the PTP of the data
-            # should be unity in all dimensions. Therefore the maximum radius is
-            # twice this.
-
-            # Nope, don't assume!
-            max_radius = 2 * np.max(np.ptp(kdtree.data, axis=0))
-
-            if minimum_points >= N:
-                radius = max_radius
-
-            else:
-                # Use the two-point autocorrelation function to figure out the
-                # appropriate radius.
-                left, right = (min_radius, max_radius)
-
-                max_scale = int(np.log10(N - K))
-                Q = 10 * max_scale
-                for scale in np.logspace(-max_scale, 1, Q):
-    
-                    P = int(scale * (N - K))
-                    ri = np.linspace(left, scale * right, P)
-                    counts = kdtree.two_point_correlation(point, ri)
-
-                    try:
-                        radius = ri[counts >= minimum_points][0]
-
-                    except:
-                        continue
-
-                    else:
-                        break
         else:
-            radius = min_radius
+            # We need to use the k-d tree to step out until our constraints are
+            # met.
+            maximum_radius_norm = 2 * np.max(np.ptp(kdtree.data, axis=0))
+
+            # This is the initial coarse search.
+            N, D = kdtree.data.shape
+            left, right = (minimum_radius_norm, maximum_radius_norm)
+
+            Q = kwargs.get("Q", 1000) # MAGIC HACK
+ 
+            # MAGIC HACK
+            tolerance = maximum_points if maximum_points is not None \
+                                       else 2 * minimum_points
+
+            while True:
+                # Shrink it.
+                ri = np.logspace(np.log10(left), np.log10(right), Q)
+
+                counts = kdtree.two_point_correlation(point, ri)
+
+                minimum_counts = np.clip(2 * np.max(np.dot(ri.reshape(-1, 1), 
+                    (minimum_density * scales).reshape(1, -1)), axis=1),
+                    minimum_points, N)
+
+                indices = np.arange(Q)[counts >= minimum_counts]
+
+                left, right = (ri[indices[0] - 1], ri[indices[1]])
+
+                if np.diff(counts[indices]).max() < tolerance:
+                    break
+
+            radius_norm = left
 
         # two_point_correlation(point, minimum_radius_norm)
         #   is eequivalent to
@@ -149,7 +178,8 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None,
         # kdtree.query_radius returns indices, d
         # kdtree.query returns d, indices
         # .... are you serious?
-        indices, d = kdtree.query_radius(point, radius, 
+
+        indices, d = kdtree.query_radius(point, radius_norm, 
             return_distance=True, sort_results=True)
 
     d, indices = (d[0], indices[0])
@@ -163,7 +193,10 @@ def query_around_point(kdtree, point, offset=0, scale=1, minimum_radius=None,
         sub_idx = np.random.choice(L, maximum_points, replace=False)
         d, indices = (d[sub_idx], indices[sub_idx])
 
+    assert minimum_points is None or indices.size >= minimum_points
     return (d, indices) if full_output else indices
+
+
 
 
 def normal_lpdf(y, mu, sigma):
