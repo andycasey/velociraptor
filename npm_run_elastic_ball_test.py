@@ -31,17 +31,20 @@ finite_indices = np.where(finite)[0]
 N, D = X.shape
 F = finite_indices.size
 L = 4 * len(config["predictor_label_names"]) + 1
-C = config["share_optimised_result_with_nearest"]
+C = config.get("share_optimised_result_with_nearest", 0)
 
-kdt, scales, offsets = npm.build_kdtree(
-    X[finite], relative_scales=config["kdtree_relative_scales"])
+kdt, scales, offsets = npm.build_kdtree(X[finite], 
+    relative_scales=config.get("kdtree_relative_scales", None))
 
 kdt_kwds = dict(offsets=offsets, scales=scales, full_output=False)
 kdt_kwds.update(
-    minimum_radius=config["kdtree_minimum_radius"],
-    minimum_points=config["kdtree_minimum_points"], 
-    maximum_points=config["kdtree_maximum_points"], 
-    minimum_density=config["kdtree_minimum_density"])
+    minimum_radius=config.get("kdtree_minimum_radius", None), # DEFAULT
+    minimum_points=config.get("kdtree_minimum_points", 1024), # DEFAULT
+    maximum_points=config.get("kdtree_maximum_points", 8192),
+    minimum_density=config.get("kdtree_minimum_density", None)
+    ) # DEFAULT
+
+logging.info("k-d tree keywords: {}".format(kdt_kwds))
 
 model = stan.load_stan_model(config["model_path"], verbose=False)
 
@@ -59,15 +62,22 @@ for key in ("tol_obj", "tol_grad", "tol_rel_grad", "tol_rel_obj"):
     if key in default_opt_kwds:
         default_opt_kwds[key] = float(default_opt_kwds[key])
 
-logging.info("k-d tree keywords: {}".format(kdt_kwds))
-logging.info("optimization keywords: {}"/format(default_opt_kwds))
-
 
 done = np.zeros(N, dtype=bool)
 queued = np.zeros(N, dtype=bool)
 results = np.nan * np.ones((N, L), dtype=float)
 
+# Set everything done except a box in parameter space.
+do = (3 > data["bp_rp"]) \
+   * (data["bp_rp"] > 2.5) \
+   * (data["absolute_rp_mag"] > -7.5) \
+   * (data["absolute_rp_mag"] < -2.5) \
+   * finite
+
+done[~do] = True
+
 default_init = np.array([0.6985507, 3.0525788, 1.1474566, 1.8999833, 0.6495420])
+
 
 def optimize_mixture_model(index, init=None):
 
@@ -93,39 +103,8 @@ def optimize_mixture_model(index, init=None):
     return (index, p_opt, indices)
 
 
-def sp_swarm(*indices, **kwargs):
 
-    logging.info("Running single processor swarm")
-
-    with tqdm.tqdm(indices, total=len(indices)) as pbar:
-
-        for index in indices:
-            if done[index]: continue
-
-            _, result, kdt_indices = optimize_mixture_model(index, default_init)
-
-            pbar.update()
-
-            if result is not None:
-                done[index] = True
-                results[index] = npm._pack_params(**result)
-
-                if C > 0:
-                    nearby_indices = np.atleast_1d(kdt_indices[:C + 1])
-                    updated = nearby_indices.size - sum(done[nearby_indices])
-
-                    done[nearby_indices] = True
-                    results[nearby_indices] = npm._pack_params(**result)
-                    pbar.update(updated)
-
-
-    return None
-                        
-
-
-
-
-def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None, 
+def swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None, 
     out_queue=None):
 
     def _random_index():
@@ -185,14 +164,83 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
     return None
 
 
+while not all(done):
 
-P = 20 # mp.cpu_count()
+    P = 20 # mp.cpu_count()
 
-# Only do stars in the box.
-do_indices = np.where(~done)[0]
+    # Only do stars in the box.
+    do_indices = np.where(~done)[0]
 
-D = do_indices.size
+    D = do_indices.size
 
+    with mp.Pool(processes=P) as pool:
+
+        manager = mp.Manager()
+        
+        in_queue = manager.Queue()
+        candidate_queue = manager.Queue()
+        out_queue = manager.Queue()
+
+        swarm_kwds = dict(max_random_starts=10,
+                          in_queue=in_queue, 
+                          out_queue=out_queue,
+                          candidate_queue=candidate_queue)
+
+
+        j = []
+        for _ in range(P):
+            j.append(pool.apply_async(swarm, do_indices, kwds=swarm_kwds))
+
+        # The swarm will just run at random initial points until we communicate
+        # back that the candidates are good.
+
+        with tqdm.tqdm(total=D) as pbar:
+
+            while True:
+
+                has_candidates, has_results = (True, True)
+
+                # Check for candidates.
+                try:
+                    r = candidate_queue.get_nowait()
+
+                except mp.queues.Empty:
+                    has_candidates = False
+
+                else:
+                    candidate_indices, init = r
+                    candidate_indices = np.atleast_1d(candidate_indices)
+
+                    for index in candidate_indices:
+                        if not done[index] and not queued[index] and finite[index]:
+                            in_queue.put((index, init))
+                            queued[index] = True
+
+
+                # Check for output.
+                try:
+                    r = out_queue.get(timeout=5)
+
+                except mp.queues.Empty:
+                    has_results = False
+
+                else:
+                    index, result = r
+                    index = np.atleast_1d(index)
+
+                    updated = index.size - sum(done[index])
+                    done[index] = True
+                    if result is not None:
+                        results[index] = npm._pack_params(**result)
+                        pbar.update(updated)
+
+                if not has_candidates and not has_results: 
+                    break
+
+
+raise a
+
+# Clean up any difficult cases.
 with mp.Pool(processes=P) as pool:
 
     manager = mp.Manager()
@@ -201,20 +249,28 @@ with mp.Pool(processes=P) as pool:
     candidate_queue = manager.Queue()
     out_queue = manager.Queue()
 
-    swarm_kwds = dict(max_random_starts=10,
+    swarm_kwds = dict(max_random_starts=0,
                       in_queue=in_queue, 
                       out_queue=out_queue,
                       candidate_queue=candidate_queue)
 
+    # Do a check for entries that are not done.
+    not_done = np.where((~done * finite))[0]
+    ND = not_done.size
+
+    logging.info("{} not done".format(ND))
+    for index in not_done:
+
+        # Get nearest points that are done.
+        indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
+        in_queue.put((index, results[indices[done[indices]][0]]))
 
     j = []
     for _ in range(P):
-        j.append(pool.apply_async(swarm, do_indices, kwds=swarm_kwds))
+        j.append(pool.apply_async(swarm, finite_indices, kwds=swarm_kwds))
 
-    # The swarm will just run at random initial points until we communicate
-    # back that the candidates are good.
 
-    with tqdm.tqdm(total=D) as pbar:
+    with tqdm.tqdm(total=ND) as pbar:
 
         while True:
 
@@ -236,7 +292,6 @@ with mp.Pool(processes=P) as pool:
                         in_queue.put((index, init))
                         queued[index] = True
 
-
             # Check for output.
             try:
                 r = out_queue.get(timeout=5)
@@ -255,12 +310,13 @@ with mp.Pool(processes=P) as pool:
                     pbar.update(updated)
 
             if not has_candidates and not has_results: 
-                break
+                sleep(1)
+                # Do a check for entries that are not done.
+                not_done = np.where((~done * finite))[0]
+                ND = not_done.size
 
-# Clean up difficult cases.
-logging.info("Cleaning up any difficult cases.")
-while sum(~done * finite) > 0:
-    sp_swarm(*np.where((~done) * finite)[0])
+                if ND == 0:
+                    break
 
 
 results_path = config.get("results_path", "results.pkl")
