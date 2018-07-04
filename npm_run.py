@@ -60,7 +60,7 @@ for key in ("tol_obj", "tol_grad", "tol_rel_grad", "tol_rel_obj"):
         default_opt_kwds[key] = float(default_opt_kwds[key])
 
 logging.info("k-d tree keywords: {}".format(kdt_kwds))
-logging.info("optimization keywords: {}"/format(default_opt_kwds))
+logging.info("optimization keywords: {}".format(default_opt_kwds))
 
 
 done = np.zeros(N, dtype=bool)
