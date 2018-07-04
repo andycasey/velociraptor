@@ -209,7 +209,7 @@ with mp.Pool(processes=P) as pool:
 
     j = []
     for _ in range(P):
-        j.append(pool.apply_async(swarm, do_indices, kwds=swarm_kwds))
+        j.append(pool.apply_async(mp_swarm, do_indices, kwds=swarm_kwds))
 
     # The swarm will just run at random initial points until we communicate
     # back that the candidates are good.
