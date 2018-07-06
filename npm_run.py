@@ -41,7 +41,7 @@ kdt_kwds.update(
     minimum_radius=config["kdtree_minimum_radius"],
     minimum_points=config["kdtree_minimum_points"], 
     maximum_points=config["kdtree_maximum_points"], 
-    minimum_density=config["kdtree_minimum_density"])
+    minimum_density=config.get("kdtree_minimum_density", None))
 
 model = stan.load_stan_model(config["model_path"], verbose=False)
 
@@ -185,11 +185,12 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
     return None
 
 
+# Set MS as DONE.
+done[data["absolute_rp_mag"] > 2.5] = True
 
 P = 20 # mp.cpu_count()
 
-# Only do stars in the box.
-do_indices = np.where(~done)[0]
+do_indices = np.where((~done) * finite)[0]
 
 D = do_indices.size
 
@@ -257,13 +258,19 @@ with mp.Pool(processes=P) as pool:
             if not has_candidates and not has_results: 
                 break
 
+# Save intermediate results to disk.
+results_path = config.get("results_path", "results.pkl")
+with open(results_path, "wb") as fp:
+    pickle.dump(results, fp, -1)
+
+logging.info("Saved intermediate results to {}".format(results_path))
+
+
 # Clean up difficult cases.
 logging.info("Cleaning up any difficult cases.")
 while sum(~done * finite) > 0:
     sp_swarm(*np.where((~done) * finite)[0])
 
-
-results_path = config.get("results_path", "results.pkl")
 with open(results_path, "wb") as fp:
     pickle.dump(results, fp, -1)
 
