@@ -54,7 +54,7 @@ def create_subset_for_npm(path, hdu=1, additional_label_names=None, **kwargs):
         
         # Astrometric unit weight error
         properties["astrometric_unit_weight_error"] = np.sqrt(
-            sources["astrometric_chi2_al"]/(sources["astrometric_n_obs_al"] - 5))
+            sources["astrometric_chi2_al"]/(sources["astrometric_n_good_obs_al"] - 5))
         
         # Photometric variability
         properties["phot_rp_variability"] = np.sqrt(sources["astrometric_n_good_obs_al"]) \
@@ -77,4 +77,4 @@ data = create_subset_for_npm(
     ))
 
 t = Table(data=data)
-t.write(output_path)
+t.write(output_path, overwrite=True)

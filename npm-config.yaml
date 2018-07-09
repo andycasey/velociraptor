@@ -4,7 +4,8 @@ results_path: results/rv_single_epoch_scatter+no_share.pkl
 indices_path: indices.memmap
 results_suffix:
 model_path: npm-cdf-constraint.stan
-overwrite_indices: false
+# Save results every N iterations.
+save_interval: 100000
 
 kdtree_label_names:
  - bp_rp
