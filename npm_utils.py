@@ -5,6 +5,7 @@ from scipy import (optimize as op, stats)
 from sklearn import neighbors as neighbours
 from scipy.special import logsumexp
 from time import time
+import warnings
 
 import stan_utils as stan
 
@@ -286,12 +287,17 @@ def ln_likelihood(y, theta, s_mu, s_sigma, b_mu, b_sigma):
     b_ivar = b_sigma**-2
     hl2p = 0.5 * np.log(2*np.pi)
     
-    s_lpdf = np.log(theta) - hl2p + 0.5 * np.log(s_ivar) \
+    s_lpdf = -hl2p + 0.5 * np.log(s_ivar) \
            - 0.5 * (y - s_mu)**2 * s_ivar
     
-    b_lpdf = np.log(1 - theta) - np.log(y*b_sigma) - hl2p \
+    b_lpdf = -np.log(y*b_sigma) - hl2p \
            - 0.5 * (np.log(y) - b_mu)**2 * b_ivar
-    ll = np.sum(s_lpdf) + np.sum(b_lpdf)
+
+    foo = np.hstack([s_lpdf, b_lpdf]) + np.log([theta, 1-theta])
+    ll = np.sum(logsumexp(foo, axis=1))
+
+    #ll = np.sum(s_lpdf) + np.sum(b_lpdf)
+
     #print(lpdf)
     
     #assert np.isfinite(ll)
@@ -302,7 +308,9 @@ def ln_prior(theta, s_mu, s_sigma, b_mu, b_sigma):
 
     # Ensure that the *mode* of the log-normal distribution is larger than the
     # mean of the normal distribution
-    min_mu_multiple = np.log(s_mu) + b_sigma**2
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        min_mu_multiple = np.log(s_mu + s_sigma) + b_sigma**2
 
     if not (1 >= theta >= 0) \
     or np.any(s_mu <= 0) \
@@ -337,14 +345,20 @@ def _unpack_params(params, L=None):
     return (theta, mu_single, sigma_single, mu_multiple, sigma_multiple)
 
 
-def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple, **kwargs):
-    return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple])
+def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple, mu_multiple_uv=None, **kwargs):
+    if mu_multiple_uv is None:
+        return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple])
+    else:
+        return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple, mu_multiple_uv])
 
 
 def _check_params_dict(d):
-    for k in ("mu_single", "sigma_single", "mu_multiple", "sigma_multiple", "mu_multiple_uv"):
-        d[k] = np.atleast_1d(d[k])
-    return d
+    if d is None: return d
+    
+    dc = {**d}
+    for k in ("mu_single", "sigma_single", "mu_multiple", "sigma_multiple"):
+        dc[k] = np.atleast_1d(dc[k]).flatten()[0]
+    return dc
 
 
 def nlp(params, y, L):
@@ -355,19 +369,20 @@ def nlp(params, y, L):
 def get_initialization_point(y):
     N, D = y.shape
 
+    ok = y <= np.mean(y)
+
     init_dict = dict(
         theta=0.5,
-        mu_single=np.median(y, axis=0),
-        sigma_single=0.1 * np.median(y, axis=0),
+        mu_single=np.median(y[ok], axis=0),
+        sigma_single=0.1 * np.median(y[ok], axis=0),
         sigma_multiple=0.1 * np.ones(D),
     )
 
     # mu_multiple is *highly* constrained. Select the mid-point between what is
     # OK:
-    
     mu_multiple_ranges = np.array([
-        np.log(init_dict["mu_single"]) + init_dict["sigma_multiple"]**2,
-        np.log(init_dict["mu_single"] + 3 * init_dict["sigma_single"]) + pow(init_dict["sigma_multiple"], 2)
+        np.log(init_dict["mu_single"] + 1 * init_dict["sigma_single"]) + init_dict["sigma_multiple"]**2,
+        np.log(init_dict["mu_single"] + 5 * init_dict["sigma_single"]) + pow(init_dict["sigma_multiple"], 2)
     ])
 
     init_dict["mu_multiple"] = np.mean(mu_multiple_ranges, axis=0)
@@ -378,10 +393,12 @@ def get_initialization_point(y):
     op_kwds = dict(x0=x0, args=(y, D))
 
     p_opt = op.minimize(nlp, **op_kwds)
-
+    
     init_dict = dict(zip(
         ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple"),
         _unpack_params(p_opt.x)))
     init_dict["mu_multiple_uv"] = 0.5 * np.ones(D)
+
+    init_dict = _check_params_dict(init_dict)
 
     return init_dict

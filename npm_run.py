@@ -14,7 +14,7 @@ from astropy.io import fits
 import npm_utils as npm
 import stan_utils as stan
 
-with open(npm.CONFIG_PATH, "r") as fp:
+with open("npm-config.rv.yaml", "r") as fp:
     config = yaml.load(fp)
 
 # Load in the data.
@@ -30,7 +30,7 @@ finite_indices = np.where(finite)[0]
 
 N, D = X.shape
 F = finite_indices.size
-L = 4 * len(config["predictor_label_names"]) + 1
+L = 4 * len(config["predictor_label_names"]) + 1 # + 1 if using mu_multiple_uv
 C = config["share_optimised_result_with_nearest"]
 
 kdt, scales, offsets = npm.build_kdtree(
@@ -45,14 +45,7 @@ kdt_kwds.update(
 
 model = stan.load_stan_model(config["model_path"], verbose=False)
 
-default_opt_kwds = dict(
-    verbose=False,
-    tol_obj=7./3 - 4./3 - 1, # machine precision
-    tol_grad=7./3 - 4./3 - 1, # machine precision
-    tol_rel_grad=1e3,
-    tol_rel_obj=1e4,
-    iter=10000)
-default_opt_kwds.update(config.get("optimisation_kwds", {}))
+default_opt_kwds = config.get("optimisation_kwds", {})
 
 # Make sure that some entries have the right units.
 for key in ("tol_obj", "tol_grad", "tol_rel_grad", "tol_rel_obj"):
@@ -67,10 +60,22 @@ done = np.zeros(N, dtype=bool)
 queued = np.zeros(N, dtype=bool)
 results = np.nan * np.ones((N, L), dtype=float)
 
-default_init = np.array([0.6985507, 3.0525788, 1.1474566, 1.8999833, 0.6495420])
-default_init = None
+default_init = dict(zip(
+    ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple"),
+    np.array([0.75, 1, 0.5, 1, 0.75])))
+default_init["mu_multiple_uv"] = 0.1
+default_init = npm._check_params_dict(default_init)
+bounds = config["parameter_bounds"]
 
 def optimize_mixture_model(index, init=None):
+    # kdt, X, indices, kdt_kwds, data
+    # OR:
+    # y --> select points in swarming thread.
+
+    # bounds
+    # model OR model_path
+    # opt_kwds
+    
 
     # Select indices and get data.
     indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
@@ -80,16 +85,102 @@ def optimize_mixture_model(index, init=None):
     if init is None:
         init = npm.get_initialization_point(y)
 
-    opt_kwds = dict(init=init, data=dict(y=y, N=y.shape[0], D=y.shape[1]))
-    opt_kwds.update(default_opt_kwds)
+    data_dict = dict(y=y, 
+                     N=y.shape[0], 
+                     D=y.shape[1],
+                     max_log_y=np.log(np.max(y)))
+    for k, v in bounds.items():
+        data_dict["{}_bounds".format(k)] = v
+    
+    trial_results = []
+    for j, init_dict in enumerate((init, "random")):
 
-    # Do optimization.
-    with stan.suppress_output():
-        try:
-            p_opt = npm._check_params_dict(model.optimizing(**opt_kwds))
+        # CHeck that the parameters are bounded?
+        if isinstance(init_dict, dict):
+            if bounds is not None:
+                for k, (lower, upper) in bounds.items():
+                    if not (upper > init_dict[k] > lower):
+                        logging.info("Clipping initial value of {} from {} to within ({}, {})".format(
+                            k, init_dict[k], lower, upper))
+                        offset = 0.01 * (upper - lower)
+                        init_dict[k] = np.clip(init_dict[k], lower + offset, upper - offset)
 
-        except:
-            p_opt = None
+
+        opt_kwds = dict(
+            init=init_dict, 
+            data=data_dict)
+        opt_kwds.update(default_opt_kwds)
+
+        # Do optimization.
+        with stan.suppress_output() as sm:
+            try:
+                p_opt = model.optimizing(**opt_kwds)
+
+            except:
+                p_opt = None
+                # TODO: Consider relaxing the optimization tolerances!
+
+        if p_opt is None:
+            # Capture stdout and stderr so we can read it later.
+            stdout, stderr = sm.stdout, sm.stderr
+
+        trial_results.append(p_opt)
+
+        if p_opt is None:
+            logging.warning("Exception when optimizing on index {} from "\
+                            "initial point {}:".format(index, init_dict))
+            logging.warning(stdout)
+            logging.warning(stderr)
+            raise
+
+        else:
+
+            tolerance = 1e-2
+            for k, v in p_opt.items():
+                if k not in bounds \
+                or (k == "theta" and (v >= 1-tolerance)): continue
+
+                lower, upper = bounds[k]
+                if np.abs(v - lower) <= tolerance \
+                or np.abs(v - upper) <= tolerance:
+                    logging.warning("Optimised {} at edge of grid ({} < {} < {})"
+                                    " - ignoring".format(k, lower, v, upper))
+                    break
+
+            else:
+                break
+
+
+    else:
+        # TODO: Consider relaxing optimization tolerances!
+        logging.warning("Optimization did not converge from any initial point "\
+                        "trialled. Consider relaxing optimization tolerances! "\
+                        "If this occurs regularly then something is very wrong!")
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.hist(y, bins=100, facecolor="#cccccc", normed=True)
+
+        # Plot a model at some optimization point.
+        init = npm.get_initialization_point(y)
+        N, D = y.shape
+
+        xi = np.linspace(0, max(y), 1000)
+
+        ax.plot(xi, npm.norm_pdf(xi, init["mu_single"], init["sigma_single"],
+            init["theta"]), c="r")
+        ax.plot(xi, npm.lognorm_pdf(xi, init["mu_multiple"], init["sigma_multiple"],
+            init["theta"]), c="r", linestyle=":")
+        
+
+        ax.plot(xi, npm.norm_pdf(xi, default_init["mu_single"], default_init["sigma_single"],
+            default_init["theta"]), c="b")
+        ax.plot(xi, npm.lognorm_pdf(xi, default_init["mu_multiple"], default_init["sigma_multiple"],
+            default_init["theta"]), c="b", linestyle=":")
+        """
+
+
+    p_opt = npm._check_params_dict(p_opt)
 
     return (index, p_opt, indices)
 
@@ -142,7 +233,7 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
                 index, init = func()
 
             except mp.queues.Empty:
-                logging.info("Using a random index to start")
+                #logging.info("Using a random index to start")
                 continue
 
             except StopIteration:
@@ -167,7 +258,7 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
                     break
 
                 out_queue.put((index, result))
-
+                
                 if result is not None:
                     if C > 0:
                         # Assign the closest points to have the same result.
@@ -175,8 +266,9 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
                         # multiple results.)
                         out_queue.put((kdt_indices[:C + 1], result))
 
-                    # Candidate next K points
-                    K = 3
+                    # Candidate next 2 points
+                    # (because exponential growth)
+                    K = 2
                     candidate_queue.put((kdt_indices[C + 1:C + 1 + K], result))
 
             break
@@ -184,16 +276,16 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
     return None
 
 
-# Set MS as DONE.
-#done[data["absolute_rp_mag"] > 2.5] = True
 
-P = 10 # mp.cpu_count()
+
+P = 20 # mp.cpu_count()
 
 do_indices = np.where((~done) * finite)[0]
 
+
 D = do_indices.size
 # Save progress
-S, save_interval = (0, config.get("save_interval", 100000))
+S, save_interval = (0, config.get("save_interval", int(0.5 * D)))
 results_path = config.get("results_path", "results.pkl")
 
 logging.info("Intermediate results will be saved to {} every {} steps".format(
@@ -279,8 +371,9 @@ logging.info("Saved intermediate results to {}".format(results_path))
 
 # Clean up difficult cases.
 logging.info("Cleaning up any difficult cases.")
-while sum(~done * finite) > 0:
-    sp_swarm(*np.where((~done) * finite)[0])
+#while sum(~done * finite) > 0:
+sp_swarm(*np.where((~done) * finite)[0])
+
 
 with open(results_path, "wb") as fp:
     pickle.dump(results, fp, -1)

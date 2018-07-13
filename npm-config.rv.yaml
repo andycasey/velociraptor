@@ -1,9 +1,8 @@
 data_path: data/gaia-sources-for-npm-colsubset.fits
-output_data_path: /media/acas0005/muon/velociraptor/npm-output.fits
-results_path: results/rv_single_epoch_scatter_v3.pkl
-model_path: npm-1d.stan
+results_path: results/rv_single_epoch_scatter.v3.pkl
+model_path: npm-1d-rv.stan
 # Save results every N iterations.
-save_interval: 100000
+save_interval: 1000000
 
 kdtree_label_names:
  - bp_rp
@@ -31,8 +30,6 @@ share_optimised_result_with_nearest: 32
 
 optimisation_kwds:
   verbose: false
-  tol_obj: 1e-3
-  tol_grad: 1e-3
   iter: 10000
 
 parameter_bounds:
