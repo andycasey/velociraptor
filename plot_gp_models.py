@@ -5,9 +5,11 @@ import numpy as np
 import os
 import pickle
 import yaml
+import scipy.optimize as op
 from astropy.io import fits
 from matplotlib.ticker import MaxNLocator
 from time import time
+from scipy.special import logsumexp
 
 import george
 import george.kernels
@@ -175,6 +177,11 @@ X_finite = np.arange(N)[np.all(np.isfinite(X), axis=1)]
 x_pred = X[X_finite]
 
 G = len(gps)
+# value, variance for each gaussian process, plus
+# log-likelihood for single star model
+# log-likelihood for binary star model
+# LL ratio.
+
 gpm_predictions = np.nan * np.ones((N, 2 * G + 3))
 
 for i, (hp, y) in enumerate(gps):
@@ -196,10 +203,63 @@ for i, (hp, y) in enumerate(gps):
     for k in range(1 + K):
         print(i, k, K)
 
-        chunk = X_finite[k::chunk_size]
+        chunk = X_finite[k * chunk_size:(k + 1) * chunk_size]
         pred, pred_var = gp.predict(y, x_for_gp(X[chunk]), return_var=True)
         gpm_predictions[chunk, 2*i:2*(i + 1)] = np.vstack([pred, pred_var]).T
 
 
+# Calculate log-likelihoods.
 
-# Calculate log-likelihoods
+
+# Calculate LL ratios.
+y = data["rv_single_epoch_scatter"]
+
+
+def normal_lpdf(y, mu, sigma):
+    ivar = sigma**(-2)
+    return 0.5 * (np.log(ivar) - np.log(2 * np.pi) - (y - mu)**2 * ivar)
+
+mu = gpm_predictions[:, 0]
+ivar = gpm_predictions[:, 2]**(-2)
+gpm_predictions[:, -3] = 0.5 * (np.log(ivar) - np.log(2*np.pi) - (y - mu)**2 * ivar)
+
+
+def lognormal_lpdf(y, mu, sigma):
+    ivar = sigma**(-2)
+    return - 0.5 * np.log(2 * np.pi) - np.log(y * sigma) \
+           - 0.5 * (np.log(y) - mu)**2 * ivar
+
+
+mu = gpm_predictions[:, 4]
+sigma = gpm_predictions[:, 6]
+ivar = sigma**(-2)
+
+gpm_predictions[:, -2] = -0.5 * np.log(2 * np.pi) - np.log(y * sigma) \
+                         -0.5 * (np.log(y) - mu)**2 * ivar
+
+# Calculate log-L ratio single/binary
+
+ln_likelihoods = np.vstack([gpm_predictions[:, -3], gpm_predictions[:, -2]]).T
+ln_likelihood = logsumexp(ln_likelihoods, axis=1)
+
+with np.errstate(under="ignore"):
+    log_tau = ln_likelihoods - ln_likelihood[:, np.newaxis]
+
+tau_single, tau_multiple = np.exp(log_tau).T
+
+gpm_predictions[:, -1] = tau_single
+
+
+t = Table.read("data/gaia-sources-for-npm.fits")
+
+names = ("mu_single", "mu_single_var",
+         "sigma_single", "sigma_single_var",
+         "mu_multiple", "mu_multiple_var",
+         "sigma_multiple", "sigma_multiple_var",
+         "ln_likelihood_single", "ln_likelihood_multiple",
+         "tau_single")
+
+for i, name in enumerate(names):
+    t["rv_{}".format(name)] = gpm_predictions[:, i]
+
+t.write("results/gp-npm-rv.fits")
