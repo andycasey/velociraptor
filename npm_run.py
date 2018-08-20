@@ -14,6 +14,10 @@ from astropy.io import fits
 import npm_utils as npm
 import stan_utils as stan
 
+DO_BALL_TEST = False
+
+np.random.seed(42)
+
 with open("npm-config.rv.yaml", "r") as fp:
     config = yaml.load(fp)
 
@@ -36,9 +40,10 @@ C = config["share_optimised_result_with_nearest"]
 kdt, scales, offsets = npm.build_kdtree(
     X[finite], relative_scales=config["kdtree_relative_scales"])
 
-kdt_kwds = dict(offsets=offsets, scales=scales, full_output=False)
+kdt_kwds = dict(offsets=offsets, scales=scales, full_output=True)
 kdt_kwds.update(
     minimum_radius=config["kdtree_minimum_radius"],
+    maximum_radius=config.get("kdtree_maximum_radius", None),
     minimum_points=config["kdtree_minimum_points"],
     maximum_points=config["kdtree_maximum_points"],
     minimum_density=config.get("kdtree_minimum_density", None))
@@ -60,12 +65,34 @@ done = np.zeros(N, dtype=bool)
 queued = np.zeros(N, dtype=bool)
 results = np.nan * np.ones((N, L), dtype=float)
 
+meta_names = ("N", "ball_medians", "ball_ptps", "y_percentiles", "max_log_y")
+M = 1 + 3 + 3 + 3 + 1
+meta_results = np.nan * np.ones((N, M), dtype=float)
+
 default_init = dict(zip(
     ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple"),
     np.array([0.75, 1, 0.5, 1, 0.75])))
 default_init["mu_multiple_uv"] = 0.1
+
+"""
+# For the v8 test
+default_init = dict(zip(
+    ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple"),
+    np.array([0.65, 2.25, 1.0, 1.6, 0.60])))
+default_init["mu_multiple_uv"] = 0.1 # not used
+"""
+
 default_init = npm._check_params_dict(default_init)
 bounds = config["parameter_bounds"]
+
+
+
+
+
+
+
+
+
 
 def optimize_mixture_model(index, init=None):
     # kdt, X, indices, kdt_kwds, data
@@ -75,23 +102,41 @@ def optimize_mixture_model(index, init=None):
     # bounds
     # model OR model_path
     # opt_kwds
-    
+
 
     # Select indices and get data.
-    indices = finite_indices[npm.query_around_point(kdt, X[index], **kdt_kwds)]
+    d, idx, meta = npm.query_around_point(kdt, X[index], **kdt_kwds)
+
+    indices = finite_indices[idx]
+
+    # Add in the max value....
+    #indices = np.unique(np.hstack([indices, max_y_index]))
 
     y = np.array([data[ln][indices] for ln in config["predictor_label_names"]]).T
 
     if init is None:
         init = npm.get_initialization_point(y)
 
-    data_dict = dict(y=y, 
-                     N=y.shape[0], 
+    #ball = np.array([data[ln][indices] for ln in config["kdtree_label_names"]]).T
+    ball = X[indices]
+
+    assert np.all(np.ptp(ball, axis=0) <= 2*np.array(config["kdtree_maximum_radius"]))
+
+
+    # Update meta dictionary with things about the data.
+    meta = dict(max_log_y=np.log(np.max(y)),
+                N=idx.size,
+                y_percentiles=np.percentile(y, [16, 50, 84]),
+                ball_ptps=np.ptp(ball, axis=0),
+                ball_medians=np.median(ball, axis=0))
+
+    data_dict = dict(y=y,
+                     N=y.shape[0],
                      D=y.shape[1],
                      max_log_y=np.log(np.max(y)))
     for k, v in bounds.items():
         data_dict["{}_bounds".format(k)] = v
-    
+
     trial_results = []
     for j, init_dict in enumerate((init, "random")):
 
@@ -107,11 +152,12 @@ def optimize_mixture_model(index, init=None):
 
 
         opt_kwds = dict(
-            init=init_dict, 
+            init=init_dict,
             data=data_dict)
         opt_kwds.update(default_opt_kwds)
 
         # Do optimization.
+        outputs = []
         with stan.suppress_output() as sm:
             try:
                 p_opt = model.optimizing(**opt_kwds)
@@ -119,10 +165,11 @@ def optimize_mixture_model(index, init=None):
             except:
                 p_opt = None
                 # TODO: Consider relaxing the optimization tolerances!
+                outputs.extend([sm.stdout, sm.stderr])
 
         if p_opt is None:
             # Capture stdout and stderr so we can read it later.
-            stdout, stderr = sm.stdout, sm.stderr
+            stdout, stderr = outputs
 
         trial_results.append(p_opt)
 
@@ -131,7 +178,6 @@ def optimize_mixture_model(index, init=None):
                             "initial point {}:".format(index, init_dict))
             logging.warning(stdout)
             logging.warning(stderr)
-            raise
 
         else:
 
@@ -153,9 +199,13 @@ def optimize_mixture_model(index, init=None):
 
     else:
         # TODO: Consider relaxing optimization tolerances!
-        logging.warning("Optimization did not converge from any initial point "\
-                        "trialled. Consider relaxing optimization tolerances! "\
-                        "If this occurs regularly then something is very wrong!")
+        logging.warning("Optimization on index {} did not converge from any "\
+                        "initial point trialled. Consider relaxing the "\
+                        "optimization tolerances! If this occurs regularly "\
+                        "then something is very wrong!".format(index))
+
+        p_opt = None
+
         """
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
@@ -171,7 +221,7 @@ def optimize_mixture_model(index, init=None):
             init["theta"]), c="r")
         ax.plot(xi, npm.lognorm_pdf(xi, init["mu_multiple"], init["sigma_multiple"],
             init["theta"]), c="r", linestyle=":")
-        
+
 
         ax.plot(xi, npm.norm_pdf(xi, default_init["mu_single"], default_init["sigma_single"],
             default_init["theta"]), c="b")
@@ -182,7 +232,7 @@ def optimize_mixture_model(index, init=None):
 
     p_opt = npm._check_params_dict(p_opt)
 
-    return (index, p_opt, indices)
+    return (index, p_opt, indices, meta)
 
 
 def sp_swarm(*indices, **kwargs):
@@ -194,13 +244,19 @@ def sp_swarm(*indices, **kwargs):
         for index in indices:
             if done[index]: continue
 
-            _, result, kdt_indices = optimize_mixture_model(index, default_init)
+            _, result, kdt_indices, meta = optimize_mixture_model(index, default_init)
 
             pbar.update()
 
+            done[index] = True
+            
             if result is not None:
+
+                meta_result = np.hstack([meta[k] for k in meta_names])
+
                 done[index] = True
                 results[index] = npm._pack_params(**result)
+                meta_results[index, :] = meta_result
 
                 if C > 0:
                     nearby_indices = np.atleast_1d(kdt_indices[:C + 1])
@@ -208,18 +264,22 @@ def sp_swarm(*indices, **kwargs):
 
                     done[nearby_indices] = True
                     results[nearby_indices] = npm._pack_params(**result)
+                    meta_results[nearby_indices] = meta_result
                     pbar.update(updated)
-
 
     return None
 
 
 
 def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
-    out_queue=None):
+             out_queue=None, seed=None):
+
+    np.random.seed(seed)
 
     def _random_index():
-        yield from np.random.choice(indices, max_random_starts, replace=False)
+        yield from np.random.choice(indices, 
+                                    min(max_random_starts, len(indices)),
+                                    replace=False)
 
     _ri = _random_index()
     random_start = lambda *_: (_ri.__next__(), default_init)
@@ -250,15 +310,15 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
                     break
 
                 try:
-                    _, result, kdt_indices = optimize_mixture_model(index, init)
+                    _, result, kdt_indices, meta = optimize_mixture_model(index, init)
 
                 except:
                     logging.exception("Exception when optimizing on {} from {}"\
                         .format(index, init))
                     break
 
-                out_queue.put((index, result))
-                
+                out_queue.put((index, result, meta))
+
                 if result is not None:
                     if C > 0:
                         # Assign the closest points to have the same result.
@@ -278,10 +338,91 @@ def mp_swarm(*indices, max_random_starts=3, in_queue=None, candidate_queue=None,
 
 
 
-P = 20 # mp.cpu_count()
 
+# Do a k-d tree query on every finite point and then look at the distribution
+# of the results.
+
+if DO_BALL_TEST:
+
+    ball_properties = np.nan * np.ones((X.shape[0], 
+                                        1 + 2 * len(config["kdtree_label_names"])))
+
+
+    def do_ball_test(*indices, out_queue=None, **kwargs):
+
+        for index in indices:
+
+            d, idx, meta = npm.query_around_point(kdt, X[index], **kdt_kwds)
+
+            ball = X[finite_indices[idx]]
+            result = np.hstack([idx.size, np.median(ball, axis=0), np.ptp(ball, axis=0)])
+
+            if out_queue is not None:
+                out_queue.put((index, result))
+
+        return None
+
+
+    logging.info("Doing ball test")
+
+    do_finite_indices = np.random.choice(finite_indices, 10000, replace=False)
+
+
+    P = 10
+    with mp.Pool(processes=P) as pool:
+
+        manager = mp.Manager()
+        out_queue = manager.Queue()
+        swarm_kwds = dict(out_queue=out_queue)
+                          
+        j = []
+        for p in range(P):
+            j.append(pool.apply_async(do_ball_test, do_finite_indices[p::P], 
+                                      kwds=swarm_kwds))
+
+        with tqdm.tqdm(total=do_finite_indices.size) as pbar:
+
+            while True:
+                # Check for output.
+                try:
+                    response = out_queue.get(timeout=10)
+
+                except mp.queues.Empty:
+                    break
+
+                else:
+                    index, result = response
+                    ball_properties[index] = result
+                    pbar.update()
+
+
+
+    fig, axes = plt.subplots(ball_properties.shape[1])
+    for i, ax in enumerate(axes):
+        ax.hist(ball_properties[do_finite_indices, i], bins=1000)
+
+
+    raise a
+
+
+P = mp.cpu_count()
+
+# As a test of K = 1024, just do a small square.
+do_these = (data["absolute_g_mag"] > -8) \
+         * (data["absolute_g_mag"] < -3) \
+         * (data["bp_rp"] > 1) \
+         * (data["bp_rp"] < 4.2) \
+         * finite
+
+done[do_these] = False
+done[~do_these] = True
+
+#done[data["absolute_rp_mag"] > 2.5] = True # as a test, just do the giant branch.
 do_indices = np.where((~done) * finite)[0]
+#do_indices = np.where(finite)[0]
 
+
+#while sum(~done * finite) > 0:
 
 D = do_indices.size
 # Save progress
@@ -299,15 +440,18 @@ with mp.Pool(processes=P) as pool:
     candidate_queue = manager.Queue()
     out_queue = manager.Queue()
 
-    swarm_kwds = dict(max_random_starts=10000,
+    swarm_kwds = dict(max_random_starts=0,
                       in_queue=in_queue,
                       out_queue=out_queue,
                       candidate_queue=candidate_queue)
 
+    print("Dumping everything into the queue!")
+    for index in do_indices:
+        in_queue.put((index, default_init))
 
     j = []
     for _ in range(P):
-        j.append(pool.apply_async(mp_swarm, do_indices, kwds=swarm_kwds))
+        j.append(pool.apply_async(mp_swarm, [], kwds=swarm_kwds))
 
     # The swarm will just run at random initial points until we communicate
     # back that the candidates are good.
@@ -350,13 +494,15 @@ with mp.Pool(processes=P) as pool:
                 has_results = False
 
             else:
-                index, result = r
+                index, result, meta = r
                 index = np.atleast_1d(index)
 
                 updated = index.size - sum(done[index])
                 done[index] = True
                 if result is not None:
                     results[index] = npm._pack_params(**result)
+                    meta_results[index] = np.hstack([meta[k] for k in meta_names])
+
                     pbar.update(updated)
 
             if not has_candidates and not has_results:
@@ -379,3 +525,7 @@ with open(results_path, "wb") as fp:
     pickle.dump(results, fp, -1)
 
 logging.info("Results written to {}".format(results_path))
+
+meta_results_path = results_path.replace(".pkl", ".meta.pkl")
+with open(meta_results_path, "wb") as fp:
+    pickle.dump(meta_results, fp, -1)

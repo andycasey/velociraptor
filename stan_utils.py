@@ -78,8 +78,6 @@ def sampling_kwds(**kwargs):
     return kwds
 
 
-
-
 class suppress_output(object):
     """ Suppress all stdout and stderr. """
 
@@ -128,5 +126,4 @@ class suppress_output(object):
 
         for fd, p in self.null_fds:
             os.close(fd)
-
-            
+            os.unlink(p)

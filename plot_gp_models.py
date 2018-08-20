@@ -1,6 +1,6 @@
-
 import matplotlib
 import matplotlib.pyplot as plt
+plt.switch_backend("agg")
 import numpy as np
 import os
 import pickle
@@ -142,7 +142,7 @@ in enumerate(zip(axes, gp_labels, gps)):
 
     kernel = construct_kernel(D)
 
-    #white_noise=-50, 
+    #white_noise=-50,
     gp = george.GP(kernel, mean=0.0, white_noise=0.0,
                    fit_mean=True, fit_white_noise=True)
     gp.set_parameter_vector(list(hp.values()))
@@ -188,7 +188,7 @@ for i, (hp, y) in enumerate(gps):
 
     kernel = construct_kernel(D)
 
-    #white_noise=-50, 
+    #white_noise=-50,
     gp = george.GP(kernel, mean=0.0, white_noise=0.0,
                    fit_mean=True, fit_white_noise=True)
     gp.set_parameter_vector(list(hp.values()))
@@ -249,8 +249,11 @@ tau_single, tau_multiple = np.exp(log_tau).T
 
 gpm_predictions[:, -1] = tau_single
 
+with open("tmp_gp.pkl", "wb") as fp:
+    pickle.dump(gpm_predictions, fp, -1)
 
-t = Table.read("data/gaia-sources-for-npm.fits")
+from astropy.table import Table
+t = Table.read("data/gaia-sources-for-npm-colsubset.fits")
 
 names = ("mu_single", "mu_single_var",
          "sigma_single", "sigma_single_var",

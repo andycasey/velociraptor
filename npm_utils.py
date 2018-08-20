@@ -48,7 +48,8 @@ def build_kdtree(X, relative_scales=None,**kwargs):
 
 
 def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None, 
-    minimum_points=1, maximum_points=None, minimum_density=None, dualtree=False,
+    maximum_radius=None, minimum_points=1, maximum_points=None, 
+    minimum_density=None, dualtree=False,
     full_output=False, **kwargs):
     """
     Query around a point in the KD-Tree until certain conditions are met (e.g.,
@@ -94,6 +95,8 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
         the indicies, otherwise just return the indices.
     """
 
+    #print("querying k-d tree")
+
     offsets = np.atleast_1d(offsets)
     scales = np.atleast_1d(scales)
 
@@ -138,6 +141,9 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
             radius_norm = minimum_radius_norm
 
         else:
+            #print("Using k-dtree to step out in radius because we have {} points within {} but need {}".format(
+            #    K, minimum_radius_norm, K_min))
+
             # We need to use the k-d tree to step out until our constraints are
             # met.
             maximum_radius_norm = 2 * np.max(np.ptp(kdtree.data, axis=0))
@@ -157,7 +163,11 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
 
                 ri = np.logspace(np.log10(left), np.log10(right), Q)
 
+
                 counts = kdtree.two_point_correlation(point, ri)
+                #print("tolerance {}: {} {} {} {}".format(tolerance, left, right, ri, counts))
+
+
 
                 minimum_counts = np.clip(2 * np.max(np.dot(ri.reshape(-1, 1), 
                     (minimum_density * scales).reshape(1, -1)), axis=1),
@@ -165,7 +175,9 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
 
                 indices = np.arange(Q)[counts >= minimum_counts]
 
-                left, right = (ri[indices[0] - 1], ri[indices[1]])
+                left, right = (ri[indices[0] - 1], ri[indices[0] + 1])
+                #print("new: {} {}".format(left, right))
+
 
                 if np.diff(counts[indices]).max() < tolerance:
                     radius_norm = ri[indices[0]]
@@ -183,6 +195,7 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
         indices, d = kdtree.query_radius(point, radius_norm, 
             return_distance=True, sort_results=True)
 
+
     d, indices = (d[0], indices[0])
 
     L = len(indices)
@@ -190,12 +203,31 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
         if maximum_points < minimum_points:
             raise ValueError("minimum_points must be smaller than maximum_points")
 
+        if maximum_radius is not None:
+            L = np.where(np.all(np.abs(point[0] - np.asarray(kdtree.data)[indices]) <= maximum_radius, axis=1))[0]
+            maximum_points = min(maximum_points, L.size)
+
+        # Sub-sample a random number.
+        sub_idx = np.random.choice(L, maximum_points, replace=False)
+
+        d, indices = (d[sub_idx], indices[sub_idx])
+
+
+    elif maximum_radius is not None:
+        
+        L = np.where(np.all(np.abs(point[0] - np.asarray(kdtree.data)[indices]) <= maximum_radius, axis=1))[0]
+        maximum_points = min(maximum_points, L.size)
+
         # Sub-sample a random number.
         sub_idx = np.random.choice(L, maximum_points, replace=False)
         d, indices = (d[sub_idx], indices[sub_idx])
 
-    assert minimum_points is None or indices.size >= minimum_points
-    return (d, indices) if full_output else indices
+
+    # Meta should include the PTP values of points in the ball.
+    meta = dict()
+
+    #assert minimum_points is None or indices.size >= minimum_points
+    return (d, indices, meta) if full_output else indices
 
 
 
@@ -298,7 +330,7 @@ def ln_likelihood(y, theta, s_mu, s_sigma, b_mu, b_sigma):
 
     #ll = np.sum(s_lpdf) + np.sum(b_lpdf)
 
-    #print(lpdf)
+    ##print(lpdf)
     
     #assert np.isfinite(ll)
     return ll
