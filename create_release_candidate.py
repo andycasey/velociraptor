@@ -437,7 +437,7 @@ for description, npm_config in config["non_parametric_models"].items():
         gp_result = op.minimize(nll, p0, jac=grad_nll, method="L-BFGS-B")
         t_opt = time() - t_init
 
-        logger.info("Result: {}".format(result))
+        logger.info("Result: {}".format(gp_result))
         logger.info("Final \log{{L}} = {:.2f}".format(gp.log_likelihood(y)))
         logger.info("Took {:.0f} seconds to optimize".format(t_opt))
 
@@ -492,14 +492,22 @@ for description, npm_config in config["non_parametric_models"].items():
 
     catalog_results[f"{prefix}_tau_single"] = np.exp(log_tau_single)
 
+# TODO: Calculate joint likelihoods and tau.
+metadata_path = config["metadata_path"]
+logger.info("Saving metadata to {}".format(metadata_path))
 
-with open(config["metadata_path"], "wb") as fp:
+with open(metadata_path, "wb") as fp:
     pickle.dump((config, gp_results), fp)
 
 # Save the catalog.
+results_path = config["results_path"]
+logger.info("Saving catalog to {}".format(results_path))
+
 del data
-data = Table.read(config["data_path"])
+data = Table.read(results_path)
 for k, v in catalog_results.items():
     data[k] = v
 
-data.write(config["results_path"], overwrite=True)
+data.write(results_path, overwrite=True)
+
+
