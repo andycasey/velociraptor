@@ -14,10 +14,12 @@ import pickle
 import tqdm
 import yaml
 from astropy.io import fits
+from astropy.table import Table
+from collections import OrderedDict
 from george import kernels
 from scipy import optimize as op
+from scipy.special import logsumexp
 from time import (sleep, time) # yea it is
-
 
 import npm_utils as npm
 import stan_utils as stan
@@ -35,7 +37,7 @@ np.random.seed(config.get("random_seed", None))
 # Load the data.
 data = fits.open(config["data_path"])[config.get("data_hdu", 1)].data
 
-catalog_results = dict()
+catalog_results = OrderedDict()
 
 # Select the sources that will be used by the non-parametric model and the
 # gaussian process. These sources should have:
@@ -67,7 +69,6 @@ data_indices = np.random.choice(finite_indices, size=N, replace=False)
 def construct_kernel(D):
     return kernels.ExpKernel(np.ones(D), ndim=D) \
          + kernels.Matern32Kernel(np.ones(D), ndim=D)
-
 
 
 def get_reference_indices(indices):
@@ -363,7 +364,19 @@ for description, npm_config in config["non_parametric_models"].items():
         # Serial.
         serial_process(*data_indices)
 
-    npm_results[description] = results
+    prefix = npm_config["descriptive_prefix"]
+    gp_labels = (
+    	"npm_{prefix}_theta",
+        "npm_{prefix}_mu_single",
+        "npm_{prefix}_sigma_single",
+        "npm_{prefix}_mu_multiple",
+        "npm_{prefix}_sigma_multiple",
+    )
+
+    for i, gp_label_format in enumerate(gp_labels):
+    	_ = np.nan * np.ones(len(data))
+    	_[data_indices] = results[:, i]
+    	catalog_results[gp_label_format.format(prefix=prefix)] = _
 
     # Run gaussian process on results.
     use_in_gp = np.all(np.isfinite(results), axis=1)
@@ -378,10 +391,10 @@ for description, npm_config in config["non_parametric_models"].items():
     gp_results[description] = []
 
     npm_labels = (
-        "{descriptive_prefix}_mu_single",
-        "{descriptive_prefix}_sigma_single",
-        "{descriptive_prefix}_mu_multiple",
-        "{descriptive_prefix}_sigma_multiple",
+        "{prefix}_mu_single",
+        "{prefix}_sigma_single",
+        "{prefix}_mu_multiple",
+        "{prefix}_sigma_multiple",
     )
 
     x_pred = np.vstack([data[ln] for ln in npm_config["kdtree_label_names"]]).T
@@ -391,7 +404,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
     for npm_index, npm_label_format in enumerate(npm_labels, start=1):
 
-        npm_label = npm_label_format.format(**npm_config)
+        npm_label = npm_label_format.format(prefix=prefix)
 
         logger.info("Fitting Gaussian process to {} model index {}: {}".format(
                     description, npm_index, npm_label))
@@ -450,15 +463,43 @@ for description, npm_config in config["non_parametric_models"].items():
                 pbar.update(chunk_indices.size)
 
     # Calculate log-likelihoods given GP parameters.
-    
+    y = np.vstack([data[ln] for ln in npm_config["predictor_label_names"]]).T[0]
 
-    # Calculate responsibility matrix.
+    mu = catalog_results[f"{prefix}_mu_single"].T[0]
+    sigma = catalog_results[f"{prefix}_sigma_single"].T[0]
 
-# Save the GP hyperparameters.
+    catalog_results[f"{prefix}_ln_likelihood_single"] = \
+        -0.5 * np.log(2*np.pi) - np.log(sigma) \
+        -0.5 * ((y - mu)/sigma)**2
 
-# Incorporate the catalog results with the data.
+    mu = catalog_results[f"{prefix}_mu_multiple"].T[0]
+    sigma = catalog_results[f"{prefix}_sigma_multiple"].T[0]
+
+    catalog_results[f"{prefix}_ln_likelihood_multiple"] = \
+        -0.5 * np.log(2*np.pi) - np.log(y * sigma) \
+        -0.5 * ((np.log(y) - mu)/sigma)**2
+
+    ln_likelihoods = np.vstack([
+        catalog_results[f"{prefix}_ln_likelihood_single"],
+        catalog_results[f"{prefix}_ln_likelihood_multiple"]
+    ]).T
+
+
+    ln_likelihood = logsumexp(ln_likelihoods, axis=1)
+
+    with np.errstate(under="ignore"):
+        log_tau_single = ln_likelihoods.T[0] - ln_likelihood
+
+    catalog_results[f"{prefix}_tau_single"] = np.exp(log_tau_single)
+
+
+with open(config["metadata_path"], "wb") as fp:
+    pickle.dump((config, gp_results), fp)
 
 # Save the catalog.
+del data
+data = Table.read(config["data_path"])
+for k, v in catalog_results.items():
+    data[k] = v
 
-
-raise a
+data.write(config["results_path"], overwrite=True)

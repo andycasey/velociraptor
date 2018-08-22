@@ -3,6 +3,7 @@ random_seed: 42
 data_path: data/gaia-sources-for-npm-colsubset.fits
 data_hdu: 1
 results_path: results/velociraptor-catalog.rc.1.fits
+metadata_path: results/velociraptor-catalog.rc.1.meta
 overwrite_results: false
 
 # This is the number of sources to fit in the non-parametric model and the
