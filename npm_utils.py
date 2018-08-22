@@ -214,7 +214,7 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
 
 
     elif maximum_radius is not None:
-        
+
         L = np.where(np.all(np.abs(point[0] - np.asarray(kdtree.data)[indices]) <= maximum_radius, axis=1))[0]
         maximum_points = min(maximum_points, L.size)
 
@@ -384,12 +384,24 @@ def _pack_params(theta, mu_single, sigma_single, mu_multiple, sigma_multiple, mu
         return np.hstack([theta, mu_single, sigma_single, mu_multiple, sigma_multiple, mu_multiple_uv])
 
 
-def _check_params_dict(d):
+def _check_params_dict(d, bounds_dict=None, fail_on_bounds=True, tolerance=0.01):
     if d is None: return d
     
     dc = {**d}
     for k in ("mu_single", "sigma_single", "mu_multiple", "sigma_multiple"):
         dc[k] = np.atleast_1d(dc[k]).flatten()[0]
+        if bounds_dict is not None and k in bounds_dict:
+            lower, upper = bounds_dict[k]
+            if (not np.all(upper >= dc[k]) or not np.all(dc[k] >= lower)):
+                if fail_on_bounds:
+                    raise ValueError("bounds not met: {} = {} not within ({} {})"\
+                                     .format(k, dc[k], lower, upper))
+                else:
+                    print("Clipping initial {} to be within bounds ({}, {}): {}"\
+                        .format(k, lower, upper, dc[k]))
+                    dc[k] = np.clip(dc[k], lower + tolerance, upper - tolerance)
+
+
     return dc
 
 

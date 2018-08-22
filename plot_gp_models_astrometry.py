@@ -1,6 +1,5 @@
 import matplotlib
 import matplotlib.pyplot as plt
-plt.switch_backend("agg")
 import numpy as np
 import os
 import pickle
@@ -17,24 +16,21 @@ import george.kernels
 from mpl_utils import mpl_style
 
 
-seed = 123
+seed = 42
 np.random.seed(seed)
 matplotlib.style.use(mpl_style)
 
 gp_labels = (
-    r"$\mu_\textrm{s}$ \textrm{/ km\,s}$^{-1}$",
-    r"$\sigma_\textrm{s}$ \textrm{/ km\,s}$^{-1}$",
-    r"$\mu_\textrm{m}$ \textrm{/ km\,s}$^{-1}$",
-    r"$\sigma_\textrm{m}$ \textrm{/ km\,s}$^{-1}$",
+    r"$\mu_\textrm{s}$",
+    r"$\sigma_\textrm{s}$",
+    r"$\mu_\textrm{m}$",
+    r"$\sigma_\textrm{m}$",
 )
 G = len(gp_labels)
 
 
 
-def x_for_gp(x):
-    x_ = np.copy(x)
-    x_[:, 0] = 1.0/x_[:,0]
-    return x_
+x_for_gp = lambda x: x
 
 
 def construct_kernel(D):
@@ -43,10 +39,10 @@ def construct_kernel(D):
 
 
 # Load the data.
-with open("npm-config.rv.yaml", "r") as fp:
+with open("npm-config.astrometry.yaml", "r") as fp:
     config = yaml.load(fp)
 
-with open("results/rv_single_epoch_scatter.v3.pkl", "rb") as fp:
+with open("results/astrometric_unit_weight_error.v4.pkl", "rb") as fp:
     npm_results = pickle.load(fp)
 
 
@@ -55,15 +51,16 @@ data = fits.open(config["data_path"])[1].data
 X = np.vstack([data[ln] for ln in config["kdtree_label_names"]]).T
 
 # Number of points to fit the GPs.
-M = 1000
+M = 10000
 
 
 N, D = X.shape
-finite_indices = np.arange(N)[np.all(np.isfinite(npm_results), axis=1)]
+use_for_fit = np.all(np.isfinite(npm_results), axis=1) 
+finite_indices = np.arange(N)[use_for_fit]
 
 fit_indices = np.random.choice(finite_indices, M, replace=False)
 
-
+"""
 gps = []
 x = X[fit_indices]
 
@@ -105,35 +102,39 @@ for npm_index in range(1, 5):
     gps.append((gp.get_parameter_dict(), y))
 
 
-with open("gp-rv-hps.pkl", "wb") as fp:
+with open("gp-astrometry-hps.pkl", "wb") as fp:
     pickle.dump((x, gps), fp, -1)
 
+"""
 
 
-
-with open("gp-rv-hps.pkl", "rb") as fp:
+with open("gp-astrometry-hps.pkl", "rb") as fp:
     x, gps = pickle.load(fp)
 
 
 
 
-K = 100000  #how many points to predict for.
+K = 10000  #how many points to predict for.
 predict_indices = np.random.choice(finite_indices, K, replace=False)
+
 x_pred = X[predict_indices]
 
-fig, axes = plt.subplots(2, len(gp_labels))
-axes = np.atleast_2d(axes).T
 
-
-
-ylabels = (
-    r"\textrm{phot rp mean mag}",
-    r"\textrm{absolute rp mag}"
+latex_labels = dict(
+    phot_rp_mean_mag=r"\textrm{phot rp mean mag}",
+    absolute_rp_mag=r"\textrm{absolute rp mag}",
+    bp_rp=r"\textrm{bp - rp}"
 )
+xlabel = "bp_rp"
+ylabels = ("absolute_rp_mag", "phot_rp_mean_mag")
+
 
 scatter_kwds = dict(s=1, alpha=0.5)
 
 _, D = x_pred.shape
+
+fig, axes = plt.subplots(2, len(gp_labels))
+axes = np.atleast_2d(axes).T
 
 for i, (ax_row, gp_label, (hp, y)) \
 in enumerate(zip(axes, gp_labels, gps)):
@@ -156,10 +157,12 @@ in enumerate(zip(axes, gp_labels, gps)):
     print(np.percentile(pred, [0, 16, 50, 84, 100]))
 
     for j, (ax, ylabel) in enumerate(zip(ax_row, ylabels)):
-        ax.scatter(x_pred.T[0], x_pred.T[1 + j], c=pred, **scatter_kwds)
+        ax.scatter(data[xlabel][predict_indices],
+                   data[ylabel][predict_indices],
+                   c=pred, **scatter_kwds)
 
-        ax.set_xlabel(r"\textrm{bp - rp}")
-        ax.set_ylabel(ylabel)
+        ax.set_xlabel(latex_labels.get(xlabel, xlabel))
+        ax.set_ylabel(latex_labels.get(ylabel, ylabel))
 
         ax.set_title(gp_label)
 
@@ -198,7 +201,7 @@ for i, (hp, y) in enumerate(gps):
 
     # Make predictions using the GP, conditioned on the y values.
     # Do it in chunks...
-    chunk_size = 100000
+    chunk_size = 10000
     K = int(np.ceil(X_finite.size / float(chunk_size)))
     for k in range(1 + K):
         print(i, k, K)
@@ -212,7 +215,7 @@ for i, (hp, y) in enumerate(gps):
 
 
 # Calculate LL ratios.
-y = data["rv_single_epoch_scatter"]
+y = data["astrometric_unit_weight_error"]
 
 
 def normal_lpdf(y, mu, sigma):
@@ -266,6 +269,6 @@ names = ("mu_single", "mu_single_var",
          "tau_single")
 
 for i, name in enumerate(names):
-    t["rv_{}".format(name)] = gpm_predictions[:, i]
+    t["astrometry_{}".format(name)] = gpm_predictions[:, i]
 
-t.write("results/gp-npm-rv.fits")
+t.write("results/gp-npm-astrometry.fits")
