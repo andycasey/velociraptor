@@ -28,6 +28,10 @@ import stan_utils as stan
 with open("model.yaml", "r") as fp:
     config = yaml.load(fp)
 
+# This is real meta.
+with open(__file__, "r") as fp:
+    this_code = fp.read()
+
 results_path = config["results_path"]
 if os.path.exists(results_path) and not config.get("overwrite_results", False):
     raise IOError("{} exists and we will not overwrite".format(results_path))
@@ -44,9 +48,15 @@ catalog_results = OrderedDict()
 # - finite values in the predictor label names of all non-parametric models
 # - finite values in the kdtree label names of all non-parametric models
 
-relevant_label_names = list(set(sum([
-    (m["predictor_label_names"], m["kdtree_label_names"]) \
-    for descr, m in config["non_parametric_models"].items()])))
+#relevant_label_names = list(set(sum([
+#    (m["predictor_label_names"], m["kdtree_label_names"]) \
+#    for descr, m in config["non_parametric_models"].items()])))
+relevant_label_names = []
+for descr, m in config["non_parametric_models"].items():
+    for k in ("predictor_label_names", "kdtree_label_names"):
+        relevant_label_names.extend(m[k])
+
+relevant_label_names = list(set(relevant_label_names))
 
 is_suitable_source = np.all(np.isfinite(np.array(
     [data[ln] for ln in relevant_label_names])), axis=0)
@@ -95,7 +105,7 @@ for description, npm_config in config["non_parametric_models"].items():
         npm.build_kdtree(X, relative_scales=npm_config["kdtree_relative_scales"])
 
     kdt_kwds = dict(
-        offsets=kdt_offsets, 
+        offsets=kdt_offsets,
         scales=kdt_scales,
         full_output=True,
         minimum_radius=npm_config.get("kdtree_minimum_radius", None),
@@ -109,7 +119,7 @@ for description, npm_config in config["non_parametric_models"].items():
     for opt_key in ("tol_obj", "tol_grad", "tol_rel_grad", "tol_rel_obj"):
         if opt_key in opt_kwds:
             opt_kwds[opt_key] = float(opt_kwds[opt_key])
-    
+
     # Initialisation point.
     init_dict = npm._check_params_dict(npm_config.get("initialisation", None))
 
@@ -117,7 +127,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
     # Arrays for results.
     L = 4 * len(npm_config["predictor_label_names"]) + 1
-    
+
     done = np.zeros(N, dtype=bool)
     queued = np.zeros(N, dtype=bool)
     results = np.nan * np.ones((N, L), dtype=float)
@@ -147,7 +157,7 @@ for description, npm_config in config["non_parametric_models"].items():
         for j, trial_init in enumerate((init, "random")):
 
             if isinstance(trial_init, dict) and bounds_dict is not None:
-                trial_init = npm._check_params_dict(trial_init, 
+                trial_init = npm._check_params_dict(trial_init,
                                                     bounds_dict=bounds_dict,
                                                     fail_on_bounds=False,
                                                     tolerance=0.01)
@@ -224,7 +234,7 @@ for description, npm_config in config["non_parametric_models"].items():
                 reference_index = get_reference_indices(index)
 
                 done[reference_index] = True
-                
+
                 if result is not None:
 
                     results[reference_index] = npm._pack_params(**result)
@@ -306,7 +316,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
             with tqdm.tqdm(total=N) as pbar:
 
-                while True:            
+                while True:
 
                     # Check for candidates.
                     try:
@@ -346,7 +356,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
                     except mp.queues.Empty:
                         if all(done):
-                            break                       
+                            break
 
                     else:
                         index, result, meta = r
@@ -366,11 +376,11 @@ for description, npm_config in config["non_parametric_models"].items():
 
     prefix = npm_config["descriptive_prefix"]
     gp_labels = (
-    	"npm_{prefix}_theta",
-        "npm_{prefix}_mu_single",
-        "npm_{prefix}_sigma_single",
-        "npm_{prefix}_mu_multiple",
-        "npm_{prefix}_sigma_multiple",
+    	f"npm_{prefix}_theta",
+        f"npm_{prefix}_mu_single",
+        f"npm_{prefix}_sigma_single",
+        f"npm_{prefix}_mu_multiple",
+        f"npm_{prefix}_sigma_multiple",
     )
 
     for i, gp_label_format in enumerate(gp_labels):
@@ -383,18 +393,18 @@ for description, npm_config in config["non_parametric_models"].items():
 
     x = X[data_indices][use_in_gp]
     _, D = x.shape
-    
+
     # TODO: revisit this.
     x_for_gp = lambda x: x
 
-    chunk_size = npm_config.get("chunk_size", 10000)
+    chunk_size = npm_config.get("gp_chunk_size", 10000)
     gp_results[description] = []
 
     npm_labels = (
-        "{prefix}_mu_single",
-        "{prefix}_sigma_single",
-        "{prefix}_mu_multiple",
-        "{prefix}_sigma_multiple",
+        f"{prefix}_mu_single",
+        f"{prefix}_sigma_single",
+        f"{prefix}_mu_multiple",
+        f"{prefix}_sigma_multiple",
     )
 
     x_pred = np.vstack([data[ln] for ln in npm_config["kdtree_label_names"]]).T
@@ -402,9 +412,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
     pred_indices = np.arange(W)[np.all(np.isfinite(x_pred), axis=1)]
 
-    for npm_index, npm_label_format in enumerate(npm_labels, start=1):
-
-        npm_label = npm_label_format.format(prefix=prefix)
+    for npm_index, npm_label in enumerate(npm_labels, start=1):
 
         logger.info("Fitting Gaussian process to {} model index {}: {}".format(
                     description, npm_index, npm_label))
@@ -463,27 +471,29 @@ for description, npm_config in config["non_parametric_models"].items():
                 pbar.update(chunk_indices.size)
 
     # Calculate log-likelihoods given GP parameters.
-    y = np.vstack([data[ln] for ln in npm_config["predictor_label_names"]]).T[0]
+    # TODO: we are assuming one dimensional y values here,....
+    y = np.array([data[ln] for ln in npm_config["predictor_label_names"]])[0]
+    assert y.size > 1, "Ugh...."
+
+    # TODO: Should we be using the mean \theta in the likelihood evaluations?
+    #theta = np.nanmean(catalog_results[f"npm_{prefix}_theta"])
 
     mu = catalog_results[f"{prefix}_mu_single"].T[0]
     sigma = catalog_results[f"{prefix}_sigma_single"].T[0]
 
     catalog_results[f"{prefix}_ln_likelihood_single"] = \
-        -0.5 * np.log(2*np.pi) - np.log(sigma) \
-        -0.5 * ((y - mu)/sigma)**2
+        - 0.5 * np.log(2*np.pi) - np.log(sigma) - 0.5 * ((y - mu)/sigma)**2
 
     mu = catalog_results[f"{prefix}_mu_multiple"].T[0]
     sigma = catalog_results[f"{prefix}_sigma_multiple"].T[0]
 
     catalog_results[f"{prefix}_ln_likelihood_multiple"] = \
-        -0.5 * np.log(2*np.pi) - np.log(y * sigma) \
-        -0.5 * ((np.log(y) - mu)/sigma)**2
+        - 0.5 * np.log(2*np.pi) - np.log(y * sigma) - 0.5 * ((np.log(y) - mu)/sigma)**2
 
     ln_likelihoods = np.vstack([
         catalog_results[f"{prefix}_ln_likelihood_single"],
         catalog_results[f"{prefix}_ln_likelihood_multiple"]
     ]).T
-
 
     ln_likelihood = logsumexp(ln_likelihoods, axis=1)
 
@@ -492,22 +502,46 @@ for description, npm_config in config["non_parametric_models"].items():
 
     catalog_results[f"{prefix}_tau_single"] = np.exp(log_tau_single)
 
-# TODO: Calculate joint likelihoods and tau.
+
+# Calculate joint likelihood.
+prefixes = [v["descriptive_prefix"] for k, v in config["non_parametric_models"].items()]
+
+ll_single = np.sum(
+    [catalog_results[f"{prefix}_ln_likelihood_single"] for prefix in prefixes],
+    axis=0)
+
+ll_multiple = np.sum(
+    [catalog_results[f"{prefix}_ln_likelihood_multiple"] for prefix in prefixes],
+    axis=0)
+
+ll_sum = logsumexp([ll_single, ll_multiple], axis=0)
+
+with np.errstate(under="ignore"):
+    log_tau_single = ll_single - ll_sum
+
+catalog_results["tau_single"] = np.exp(log_tau_single)
+
+
+# Save the metadata and everything needed to reproduce this work.
 metadata_path = config["metadata_path"]
 logger.info("Saving metadata to {}".format(metadata_path))
 
 with open(metadata_path, "wb") as fp:
-    pickle.dump((config, gp_results), fp)
+    pickle.dump((config, this_code, gp_results), fp)
 
 # Save the catalog.
+with open("tmp.pkl", "wb") as fp:
+    pickle.dump(catalog_results, fp)
+logger.info("Saved catalog results to tmp.pkl just in cases")
+
+
 results_path = config["results_path"]
 logger.info("Saving catalog to {}".format(results_path))
 
 del data
-data = Table.read(results_path)
+data = Table.read(config["data_path"])
 for k, v in catalog_results.items():
     data[k] = v
 
 data.write(results_path, overwrite=True)
-
-
+logger.info("Fin")
