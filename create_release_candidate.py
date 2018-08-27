@@ -455,7 +455,10 @@ for description, npm_config in config["non_parametric_models"].items():
         # Make predictions for all sources.
         logger.info("Making {} predictions for all sources".format(npm_label))
 
-        catalog_results.setdefault(npm_label, np.nan * np.ones((W, 2)))
+        npm_label_var = f"{npm_label}_var"
+
+        catalog_results.setdefault(npm_label, np.nan * np.ones(W))
+        catalog_results.setdefault(npm_label_var, np.nan * np.ones(W))
 
         H = int(np.ceil(pred_indices.size / float(chunk_size)))
         with tqdm.tqdm(total=pred_indices.size) as pbar:
@@ -465,8 +468,8 @@ for description, npm_config in config["non_parametric_models"].items():
                 pred, pred_var = gp.predict(y, x_for_gp(x_pred[chunk_indices]),
                                             return_var=True)
 
-                catalog_results[npm_label][chunk_indices, 0] = pred
-                catalog_results[npm_label][chunk_indices, 1] = pred_var
+                catalog_results[npm_label][chunk_indices] = pred
+                catalog_results[npm_label_var][chunk_indices] = pred_var
 
                 pbar.update(chunk_indices.size)
 
@@ -478,14 +481,14 @@ for description, npm_config in config["non_parametric_models"].items():
     # TODO: Should we be using the mean \theta in the likelihood evaluations?
     #theta = np.nanmean(catalog_results[f"npm_{prefix}_theta"])
 
-    mu = catalog_results[f"{prefix}_mu_single"].T[0]
-    sigma = catalog_results[f"{prefix}_sigma_single"].T[0]
+    mu = catalog_results[f"{prefix}_mu_single"]
+    sigma = catalog_results[f"{prefix}_sigma_single"]
 
     catalog_results[f"{prefix}_ln_likelihood_single"] = \
         - 0.5 * np.log(2*np.pi) - np.log(sigma) - 0.5 * ((y - mu)/sigma)**2
 
-    mu = catalog_results[f"{prefix}_mu_multiple"].T[0]
-    sigma = catalog_results[f"{prefix}_sigma_multiple"].T[0]
+    mu = catalog_results[f"{prefix}_mu_multiple"]
+    sigma = catalog_results[f"{prefix}_sigma_multiple"]
 
     catalog_results[f"{prefix}_ln_likelihood_multiple"] = \
         - 0.5 * np.log(2*np.pi) - np.log(y * sigma) - 0.5 * ((np.log(y) - mu)/sigma)**2

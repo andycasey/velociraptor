@@ -2,15 +2,14 @@ random_seed: 42
 
 data_path: data/gaia-sources-for-npm-colsubset.fits
 data_hdu: 1
-results_path: results/velociraptor-catalog.rc.1.fits
-metadata_path: results/velociraptor-catalog.rc.1.meta
+results_path: results/velociraptor-catalog.rc.2.fits
+metadata_path: results/velociraptor-catalog.rc.2.meta
 overwrite_results: false
 
 # This is the number of sources to fit in the non-parametric model and the
 # gaussian process. This should be set by "what you can afford" by the gaussian
 # process.
-number_of_sources_to_fit: 100
-
+number_of_sources_to_fit: 5000
 
 # These are the settings for the non-parametric models you want to run.
 non_parametric_models:
@@ -54,7 +53,6 @@ non_parametric_models:
       # If set to a negative number, then the number of cores will be set by the
       # number of cores available.
       multiprocessing_threads: -1
-
       gp_chunk_size: 10000
 
   astrometry:
@@ -96,7 +94,6 @@ non_parametric_models:
     # If set to a negative number, then the number of cores will be set by the
     # number of cores available.
     multiprocessing_threads: -1
-
     gp_chunk_size: 10000
 
 #TODO: parameterise what sensible options we can/should here (eg kernels?)
