@@ -3,35 +3,49 @@ import os
 import pickle
 from astropy.io import fits
 from astropy.table import Table
+from scipy.stats import binned_statistic
 
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from mpl_utils import (mpl_style, plot_binned_statistic)
+from mpl_utils import (mpl_style, plot_binned_statistic, plot_histogram_steps)
 
 plt.style.use(mpl_style)
 
 
 BASE_PATH = "../../"
-RELEASE_CANDIDATE_VERSION = 0
+RELEASE_CANDIDATE_VERSION = 5
 
 MAKE_FIGURES = [
     "rv_hrd_single_star_fraction_hist",
     "rv_hrd_single_star_fraction_scatter",
-    "rv_sb9_kalpha_comparison",
-    "rv_sb9_k_comparison",
-    "rv_sb9_kalpha_comparison_period",
-    "rv_sb9_kp_corner",
     "rv_apw_unimodal_k_comparison",
     "rv_apw_unimodal_kalpha_comparison",
     "rv_apw_percentiles_k_comparison",
     "rv_gp_hrd",
     "rv_gp_wrt_params",
     "rv_soubiran_hist",
-    "rv_huang_hist"
+    "rv_huang_hist",
+    "rv_mean_tau_single_wrt_kdt_labels",
+    "ast_mean_tau_single_wrt_kdt_labels",
+    "mean_tau_single_wrt_kdt_labels",
+    "all_tau_single_wrt_kdt_labels",
+    "rv_sb9_k_comparison",
+    "hrd_single_star_fraction_hist",
+    "tau_single_wrt_kdt_labels",
+    "rv_huang_hist2",
+
 ]
+
+#MAKE_FIGURES = [
+#    "ast_gp_hrd"
+#]
+MAKE_FIGURES = [
+    "tau_single_hrd"
+]
+
 
 DEFAULT_SEQUENTIAL_CMAP = "viridis"
 
@@ -39,17 +53,24 @@ DEFAULT_SEQUENTIAL_CMAP = "viridis"
 velociraptor = fits.open(os.path.join(
     BASE_PATH,
     "results", 
-    "velociraptor-catalog-rc.{:.0f}.fits".format(RELEASE_CANDIDATE_VERSION)))
+    "velociraptor-catalog.rc.{:.0f}.fits".format(RELEASE_CANDIDATE_VERSION)))
 velociraptor = velociraptor[1].data
 
 latex_labels = dict(
     bp_rp=r"\textrm{bp - rp}",
     phot_rp_mean_mag=r"\textrm{apparent rp mag}",
     absolute_rp_mag=r"\textrm{absolute rp mag}",
+    absolute_g_mag=r"\textrm{absolute g mag}",
     rv_mu_single=r"$\mu_s$ \textrm{/ km\,s}$^{-1}$",
-    rv_sigma_single=r"$\sigma_s$ \textrm{/ km\,s}$^{-1}$"
-)
+    rv_sigma_single=r"$\sigma_s$ \textrm{/ km\,s}$^{-1}$",
+    rv_tau_single=r"$\tau_\textrm{rv,single}$",
+    ast_tau_single=r"$\tau_\textrm{ast,single}$",
+    rv_single_epoch_scatter=r"\textrm{radial velocity jitter / km\,s}$^{-1}$",
+    astrometric_unit_weight_error=r"\textrm{astrometric jitter}",
+    ast_mu_single=r"$\mu_\textrm{s,ast}$",
+    ast_sigma_single=r"$\sigma_\textrm{s,ast}$"
 
+)
 
 common_kwds = dict([
     ("bp_rp.limits", (-0.25, 6.5)),
@@ -60,15 +81,18 @@ common_kwds = dict([
 one_to_one_line_kwds = dict(c="#666666", linestyle=":", lw=1, zorder=-1)
 
 def savefig(fig, basename):
-    fig.savefig("{}.pdf".format(basename), dpi=300)
-    fig.savefig("{}.png".format(basename), dpi=150)
-    print("Saved figure {0}.png and {0}.pdf".format(basename))
+    prefix = f"{basename}.v{RELEASE_CANDIDATE_VERSION}"
+    fig.savefig(f"{prefix}.png")
+    #fig.savefig(f"{prefix}.png", dpi=150)
+    print(f"Saved figure {prefix}.png")
+
+    #plt.close("all")
 
 
 def cross_match(A_source_ids, B_source_ids):
 
-    A = np.array(A_source_ids, dtype=long)
-    B = np.array(B_source_ids, dtype=long)
+    A = np.array(A_source_ids, dtype=np.long)
+    B = np.array(B_source_ids, dtype=np.long)
 
     ai = np.where(np.in1d(A, B))[0]
     bi = np.where(np.in1d(B, A))[0]
@@ -99,6 +123,418 @@ def estimate_K(rv_single_epoch_scatter, rv_mu_single, rv_sigma_single,
 log_K_significance = np.log10(
     (velociraptor["rv_single_epoch_scatter"] - velociraptor["rv_mu_single"]) \
   /  velociraptor["rv_sigma_single"])
+
+
+figure_name = "tau_single_hrd"
+if figure_name in MAKE_FIGURES:
+
+    ordered, reverse = (True, False)
+    subsample = 10000
+
+    xlabel = "bp_rp"
+    ylabels = ("absolute_rp_mag", "absolute_g_mag", "absolute_g_mag")
+    zlabels = ("rv_tau_single", "ast_tau_single", "tau_single")
+    titles = (
+        r"\textrm{radial velocity}",
+        r"\textrm{astrometry}",
+        r"\textrm{joint information}"
+    )
+
+    K = len(ylabels)
+
+    plot_binned_statistic_kwds = dict(function="mean", vmin=0, vmax=1, bins=100,
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=None,
+                                      subsample=subsample, min_entries_per_bin=5)
+
+    fig, axes = plt.subplots(1, K + 1, figsize=(4 * K, 4))
+
+    for i, (ax, ylabel, zlabel, title) \
+    in enumerate(zip(axes, ylabels, zlabels, titles)):
+
+        plot_binned_statistic(
+            velociraptor[xlabel],
+            velociraptor[ylabel],
+            velociraptor[zlabel],
+            ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+            **plot_binned_statistic_kwds)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+        ax.set_xlim(common_kwds.get("{}.limits".format(xlabel), None))
+        ax.set_ylim(common_kwds.get("{}.limits".format(ylabel), None))
+
+        ax.set_title(title)
+
+    """
+    cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
+    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
+    cbar.set_label(r"\textrm{single star probability} $\tau$")
+    """
+    #cbar = plt.colorbar(ax.images[0], ax=list(axes))
+    #divider = make_axes_locatable(ax)
+    #cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = plt.colorbar(ax.images[0], cax=axes[-1])
+    
+    for ax in axes[:-1]:
+        ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
+
+    fig.tight_layout()
+    cax = axes[-1]
+
+    savefig(fig, figure_name)
+
+
+
+
+figure_name = "tau_single_wrt_kdt_labels"
+if figure_name in MAKE_FIGURES:
+
+    ordered = True
+    reverse = False
+    subset = 100000
+
+    label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
+    ylabels = ("rv_single_epoch_scatter", "astrometric_unit_weight_error")
+    zlabels = ("rv_tau_single", "ast_tau_single")
+
+    fig, axes = plt.subplots(2, 3, figsize=(12, 9))
+
+    for i, ax_row in enumerate(axes):
+
+        ylabel = ylabels[i]
+        zlabel = zlabels[i]
+
+        for j, ax in enumerate(ax_row):
+
+            xlabel = label_names[j]
+
+            x = velociraptor[xlabel]
+            y = velociraptor[ylabel]
+            z = velociraptor[zlabel]
+
+            mask = np.isfinite(x * y * z)
+
+            x, y, z = (x[mask], y[mask], z[mask])
+
+
+            if subset is not None:
+                idx = np.random.choice(x.size, subset, replace=False)
+                x, y, z = (x[idx], y[idx], z[idx])
+
+            if ordered:
+                idx = np.argsort(z)
+                if reverse:
+                    idx = idx[::-1]
+
+                x, y, z = (x[idx], y[idx], z[idx])
+
+            ax.scatter(x, y, c=z, s=1, cmap=DEFAULT_SEQUENTIAL_CMAP,
+                       rasterized=True)
+
+            ax.set_xlabel(latex_labels.get(xlabel, xlabel))
+            ax.set_ylabel(latex_labels.get(ylabel, ylabel))
+
+
+            """
+            plot_binned_statistic_kwds = dict(function="mean", bins=100,
+                                      xlabel=latex_labels.get(xlabel, xlabel),
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, 
+                                      subsample=None, min_entries_per_bin=5)
+
+            plot_binned_statistic(x, y, z,
+                ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+                **plot_binned_statistic_kwds)
+            """
+
+
+            ax.semilogy()
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+
+
+
+figure_name = "rv_mean_tau_single_wrt_kdt_labels"
+if figure_name in MAKE_FIGURES:
+
+
+    label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
+    ylabel = r"$\langle\tau_\textrm{rv,single}\rangle$"
+
+    mask = np.isfinite(velociraptor["rv_tau_single"])
+
+    rv_tau_single = velociraptor["rv_tau_single"]
+
+    fig, axes = plt.subplots(1, len(label_names), figsize=(12, 4))
+
+    bins = 20
+
+    for i, (ax, label_name) in enumerate(zip(axes, label_names)):
+
+        mean, edge, bin_index = binned_statistic(velociraptor[label_name][mask],
+                                                 rv_tau_single[mask],
+                                                 statistic="mean", bins=bins)
+        var, _, __ = binned_statistic(velociraptor[label_name][mask],
+                                      rv_tau_single[mask],
+                                      statistic=np.var, bins=bins)
+
+        count, _, __ = binned_statistic(velociraptor[label_name][mask],
+                                      rv_tau_single[mask],
+                                      statistic="count", bins=bins)
+
+
+        yerr = np.sqrt(var/(count - 1))
+        #yerr = np.sqrt(var)
+        center = edge[:-1] + 0.5 * np.diff(edge)
+
+        plot_histogram_steps(ax, center, mean, yerr)
+
+        ax.set_xlabel(latex_labels.get(label_name, label_name))
+        ax.set_ylabel(ylabel)
+
+        ax.set_xlim(edge[0], edge[-1])
+        ax.set_ylim(-0.1, 1.1)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+figure_name = "ast_mean_tau_single_wrt_kdt_labels"
+if figure_name in MAKE_FIGURES:
+
+
+    label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
+    ylabel = r"$\langle\tau_\textrm{ast,single}\rangle$"
+
+    fig, axes = plt.subplots(1, len(label_names), figsize=(12, 4))
+
+    bins = 20
+
+    for i, (ax, label_name) in enumerate(zip(axes, label_names)):
+
+        x = velociraptor[label_name]
+        y = velociraptor["ast_tau_single"]
+
+        mask = np.isfinite(x * y)
+
+        mean, edge, bin_index = binned_statistic(x[mask], y[mask],
+                                                 statistic="mean", bins=bins)
+        var, _, __ = binned_statistic(x[mask], y[mask],
+                                      statistic=np.var, bins=bins)
+
+        count, _, __ = binned_statistic(x[mask], y[mask],
+                                        statistic="count", bins=bins)
+
+
+        yerr = np.sqrt(var/(count - 1))
+        #yerr = np.sqrt(var)
+        center = edge[:-1] + 0.5 * np.diff(edge)
+
+        plot_histogram_steps(ax, center, mean, yerr)
+
+        ax.set_xlabel(latex_labels.get(label_name, label_name))
+        ax.set_ylabel(ylabel)
+
+        ax.set_xlim(edge[0], edge[-1])
+        ax.set_ylim(-0.1, 1.1)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+
+figure_name = "mean_tau_single_wrt_kdt_labels"
+if figure_name in MAKE_FIGURES:
+
+
+    label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
+    ylabel = r"$\langle\tau_\textrm{single}\rangle$"
+
+    fig, axes = plt.subplots(1, len(label_names), figsize=(12, 4))
+
+    bins = 20
+
+    for i, (ax, label_name) in enumerate(zip(axes, label_names)):
+
+        x = velociraptor[label_name]
+        y = velociraptor["tau_single"]
+
+        mask = np.isfinite(x * y)
+
+        mean, edge, bin_index = binned_statistic(x[mask], y[mask],
+                                                 statistic="mean", bins=bins)
+        var, _, __ = binned_statistic(x[mask], y[mask],
+                                      statistic=np.var, bins=bins)
+
+        count, _, __ = binned_statistic(x[mask], y[mask],
+                                        statistic="count", bins=bins)
+
+
+        yerr = np.sqrt(var/(count - 1))
+        #yerr = np.sqrt(var)
+        center = edge[:-1] + 0.5 * np.diff(edge)
+
+        plot_histogram_steps(ax, center, mean, yerr)
+
+        ax.set_xlabel(latex_labels.get(label_name, label_name))
+        ax.set_ylabel(ylabel)
+
+        ax.set_xlim(edge[0], edge[-1])
+        ax.set_ylim(-0.1, 1.1)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+
+
+
+figure_name = "all_tau_single_wrt_kdt_labels"
+if figure_name in MAKE_FIGURES:
+
+
+    label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
+    ylabel = r"$\langle\tau_\textrm{single}\rangle$"
+
+    fig, axes = plt.subplots(1, len(label_names), figsize=(12, 4))
+
+    bins = 20
+
+    for prefix in (None, "rv", "ast"):
+
+        label = "tau_single" if prefix is None else f"{prefix}_tau_single"
+
+        for i, (ax, label_name) in enumerate(zip(axes, label_names)):
+
+            x = velociraptor[label_name]
+            y = velociraptor[label]
+
+            mask = np.isfinite(x * y)
+
+            mean, edge, bin_index = binned_statistic(x[mask], y[mask],
+                                                     statistic="mean", bins=bins)
+            var, _, __ = binned_statistic(x[mask], y[mask],
+                                          statistic=np.var, bins=bins)
+
+            count, _, __ = binned_statistic(x[mask], y[mask],
+                                            statistic="count", bins=bins)
+
+
+            yerr = np.sqrt(var/(count - 1))
+            #yerr = np.sqrt(var)
+            center = edge[:-1] + 0.5 * np.diff(edge)
+
+            plot_histogram_steps(ax, center, mean, yerr, 
+                                 label="joint" if prefix is None else prefix)
+
+            ax.set_xlabel(latex_labels.get(label_name, label_name))
+            ax.set_ylabel(ylabel)
+
+            ax.set_xlim(edge[0], edge[-1])
+            ax.set_ylim(-0.1, 1.1)
+
+            ax.xaxis.set_major_locator(MaxNLocator(6))
+            ax.yaxis.set_major_locator(MaxNLocator(6))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+
+figure_name = "hrd_single_star_fraction_hist"
+if figure_name in MAKE_FIGURES:
+
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+
+    xlabel = "bp_rp"
+    ylabel = "phot_rp_mean_mag"
+    zlabel = "tau_single"
+
+    # Restrict sensibly.
+    mask = (velociraptor["absolute_rp_mag"] > -16) \
+         * (velociraptor["bp_rp"] < 6.5)
+
+    plot_binned_statistic_kwds = dict(function="mean", vmin=0, vmax=1, bins=100,
+                                      xlabel=latex_labels.get(xlabel, xlabel),
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=mask, 
+                                      subsample=None, min_entries_per_bin=5)
+
+    for ax, ylabel in zip(axes, ("phot_rp_mean_mag", "absolute_rp_mag")):
+
+        plot_binned_statistic(
+            velociraptor[xlabel],
+            velociraptor[ylabel],
+            velociraptor[zlabel],
+            ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+            **plot_binned_statistic_kwds)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+        ax.set_xlim(common_kwds.get("{}.limits".format(xlabel), None))
+        ax.set_ylim(common_kwds.get("{}.limits".format(ylabel), None))
+
+    cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
+    cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{rv,single}$")
+    fig.tight_layout()
+
+    savefig(fig, figure_name)
+
+
+
+figure_name = "ast_hrd_single_star_fraction_hist"
+if figure_name in MAKE_FIGURES or True:
+
+
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+
+    xlabel = "bp_rp"
+    ylabel = "phot_rp_mean_mag"
+    zlabel = "ast_tau_single"
+
+    # Restrict sensibly.
+    mask = (velociraptor["absolute_rp_mag"] > -16) \
+         * (velociraptor["bp_rp"] < 6.5) \
+         * np.isfinite(velociraptor["rv_single_epoch_scatter"])
+
+    plot_binned_statistic_kwds = dict(function="mean", vmin=0, vmax=1, bins=100,
+                                      xlabel=latex_labels.get(xlabel, xlabel),
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=mask, 
+                                      subsample=None, min_entries_per_bin=5)
+
+    for ax, ylabel in zip(axes, ("phot_rp_mean_mag", "absolute_rp_mag")):
+
+        plot_binned_statistic(
+            velociraptor[xlabel],
+            velociraptor[ylabel],
+            velociraptor[zlabel],
+            ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+            **plot_binned_statistic_kwds)
+
+        ax.xaxis.set_major_locator(MaxNLocator(6))
+        ax.yaxis.set_major_locator(MaxNLocator(6))
+
+        ax.set_xlim(common_kwds.get("{}.limits".format(xlabel), None))
+        ax.set_ylim(common_kwds.get("{}.limits".format(ylabel), None))
+
+    cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
+    cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{ast,single}$")
+    fig.tight_layout()
+
+    savefig(fig, figure_name)
 
 
 
@@ -166,7 +602,7 @@ if figure_name in MAKE_FIGURES:
             idx = idx[::-1]
 
     scatter_kwds = dict(vmin=0, vmax=1, cmap=DEFAULT_SEQUENTIAL_CMAP, s=1, 
-                        alpha=0.1, c=velociraptor[zlabel][idx])
+                        alpha=0.1, c=velociraptor[zlabel][idx], rasterized=True)
 
     for ax, ylabel in zip(axes, ("phot_rp_mean_mag", "absolute_rp_mag")):
         ax.scatter(
@@ -216,6 +652,13 @@ if any(["sb9" in figure_name.lower() for figure_name in MAKE_FIGURES]):
     sb9 = sb9.group_by("source_id")
     sb9 = sb9[sb9.groups.indices[:-1]]
 
+    # Only show SB9 stars that meet these criteria:
+    sb9_mask = (sb9["f_K1"] != ">") \
+             * (sb9["f_T0"] == 0) \
+             * (sb9["Grade"] > 0) \
+             * (sb9["f_omega"] != "a")
+    sb9 = sb9[sb9_mask]
+
     assert len(set(sb9["source_id"])) == len(sb9)
 
     vl_sb9_ids, sb9_ids = cross_match(velociraptor["source_id"], sb9["source_id"])
@@ -238,6 +681,7 @@ if figure_name in MAKE_FIGURES:
 
     x = sb9["K1"][sb9_ids] * scalar
     y = K_est * scalar
+    xerr = sb9["e_K1"][sb9_ids] * scalar
     yerr = K_est_err * scalar
     c = log_K_significance[vl_sb9_ids]
 
@@ -248,12 +692,12 @@ if figure_name in MAKE_FIGURES:
     else:
         idx = np.arange(len(c))
 
-    x, y, yerr, c = (x[idx], y[idx], yerr[idx], c[idx]) 
+    x, y, xerr, yerr, c = (x[idx], y[idx], xerr[idx], yerr[idx], c[idx]) 
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
-    scat = ax.scatter(x, y, c=c, s=10, vmax=1.75)
-    ax.errorbar(x, y, yerr=yerr, fmt=None, ecolor="#CCCCCC", zorder=-1, 
-                linewidth=1, capsize=0)
+    scat = ax.scatter(x, y, c=c, s=10, vmax=1.75, rasterized=True)
+    ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="none", ecolor="#CCCCCC", 
+                zorder=-1, linewidth=1, capsize=0)
 
     ax.loglog()
 
@@ -283,7 +727,7 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "rv_sb9_k_comparison"
+figure_name = "rv_sb9_kalpha_comparison_tau"
 if figure_name in MAKE_FIGURES:
 
     sort, reverse = (True, False)
@@ -295,10 +739,14 @@ if figure_name in MAKE_FIGURES:
                                   vl_sb9_subset["rv_mu_single_var"],
                                   vl_sb9_subset["rv_sigma_single_var"])
 
-    x = sb9["K1"][sb9_ids]
-    y = K_est
-    yerr = K_est_err
-    c = log_K_significance[vl_sb9_ids]
+
+    scalar = (1.0 / (sb9["Per"] * (1 - sb9["e"]**2)**0.5))[sb9_ids]
+
+    x = sb9["K1"][sb9_ids] * scalar
+    y = K_est * scalar
+    xerr = sb9["e_K1"][sb9_ids] * scalar
+    yerr = K_est_err * scalar
+    c = vl_sb9_subset["rv_tau_single"]
 
     if sort:
         idx = np.argsort(c)
@@ -307,11 +755,11 @@ if figure_name in MAKE_FIGURES:
     else:
         idx = np.arange(len(c))
 
-    x, y, yerr, c = (x[idx], y[idx], yerr[idx], c[idx]) 
+    x, y, xerr, yerr, c = (x[idx], y[idx], xerr[idx], yerr[idx], c[idx]) 
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
-    scat = ax.scatter(x, y, c=c, s=10, vmax=1.75)
-    ax.errorbar(x, y, yerr=yerr, fmt=None, ecolor="#CCCCCC", zorder=-1, 
+    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1, rasterized=True)
+    ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="none", ecolor="#CCCCCC", zorder=-1, 
                 linewidth=1, capsize=0)
 
     ax.loglog()
@@ -327,8 +775,70 @@ if figure_name in MAKE_FIGURES:
 
     cbar = plt.colorbar(scat, cax=cax)
 
-    #cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{single}$")
-    cbar.set_label(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
+    cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{single}$")
+    fig.tight_layout()
+
+    #ax.set_xlabel(r"$K/P\sqrt{1 - e^2}$ \textrm{(SB9)}")
+    #ax.set_ylabel(r"$K_\textrm{est} /P\sqrt{1 - e^2}$ \textrm{(this work)}")
+    ax.set_xlabel(r"$K_{1} / \alpha$ \textrm{(SB9)}")
+    ax.set_ylabel(r"$K_{1,\textrm{est}} / \alpha$ \textrm{(this work)}")
+
+    fig.tight_layout()
+
+    savefig(fig, figure_name)
+
+
+
+
+figure_name = "rv_sb9_k_comparison"
+if figure_name in MAKE_FIGURES:
+
+    sort, reverse = (True, False)
+    vl_sb9_subset = velociraptor[vl_sb9_ids]
+
+    K_est, K_est_err = estimate_K(vl_sb9_subset["rv_single_epoch_scatter"],
+                                  vl_sb9_subset["rv_mu_single"],
+                                  vl_sb9_subset["rv_sigma_single"],
+                                  vl_sb9_subset["rv_mu_single_var"],
+                                  vl_sb9_subset["rv_sigma_single_var"])
+
+    x = sb9["K1"][sb9_ids]
+    y = K_est
+    xerr = sb9["e_K1"][sb9_ids]
+    yerr = K_est_err
+    #c = log_K_significance[vl_sb9_ids]
+    c = sb9["e"][sb9_ids]
+
+    if sort:
+        idx = np.argsort(c)
+        if reverse:
+            idx = idx[::-1]
+    else:
+        idx = np.arange(len(c))
+
+    x, y, xerr, yerr, c = (x[idx], y[idx], xerr[idx], yerr[idx], c[idx]) 
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 7))
+    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1, rasterized=True)
+    ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="none", ecolor="#CCCCCC", zorder=-1, 
+                linewidth=1, capsize=0)
+
+    ax.loglog()
+
+    limits = np.array([ax.get_xlim(), ax.get_ylim()])
+    limits = (np.min(limits), np.max(limits))
+    ax.plot(limits, limits, **one_to_one_line_kwds)
+    ax.set_xlim(limits)
+    ax.set_ylim(limits)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+
+    cbar = plt.colorbar(scat, cax=cax)
+
+    cbar.set_label(r"\textrm{eccentricity (SB9)}")
+    #cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{rv,single}$")
+    #cbar.set_label(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
     fig.tight_layout()
 
     #ax.set_xlabel(r"$K/P\sqrt{1 - e^2}$ \textrm{(SB9)}")
@@ -360,6 +870,7 @@ if figure_name in MAKE_FIGURES:
 
     x = sb9["K1"][sb9_ids] * scalar
     y = K_est * scalar
+    xerr = sb9["e_K1"][sb9_ids] * scalar
     yerr = K_est_err * scalar
     c = np.log10(sb9["Per"][sb9_ids])
 
@@ -370,11 +881,11 @@ if figure_name in MAKE_FIGURES:
     else:
         idx = np.arange(len(c))
 
-    x, y, yerr, c = (x[idx], y[idx], yerr[idx], c[idx]) 
+    x, y, xerr, yerr, c = (x[idx], y[idx], xerr[idx], yerr[idx], c[idx]) 
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
-    scat = ax.scatter(x, y, c=c, s=10, vmax=1.75)
-    ax.errorbar(x, y, yerr=yerr, fmt=None, ecolor="#CCCCCC", zorder=-1, 
+    scat = ax.scatter(x, y, c=c, s=10, vmax=1.75, rasterized=True)
+    ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="none", ecolor="#CCCCCC", zorder=-1, 
                 linewidth=1, capsize=0)
 
     ax.loglog()
@@ -424,7 +935,7 @@ if figure_name in MAKE_FIGURES:
     fig, axes = plt.subplots(2, 2)
 
     axes[0, 1].set_visible(False)
-    axes[1, 0].scatter(x[idx], y[idx], c=c[idx], s=10, vmax=1.75)
+    axes[1, 0].scatter(x[idx], y[idx], c=c[idx], s=10, vmax=1.75, rasterized=True)
 
     axes[1, 0].loglog()
     axes[1, 0].set_xlabel(r"$P$ \textrm{/ days}")
@@ -494,9 +1005,9 @@ if figure_name in MAKE_FIGURES:
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
 
-    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1)
-    ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt=None, ecolor="#cccccc", lw=1,
-                zorder=-1)
+    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1, rasterized=True)
+    ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt="none", ecolor="#cccccc", lw=1,
+                zorder=-1, rasterized=True)
     ax.loglog()
 
     divider = make_axes_locatable(ax)
@@ -553,9 +1064,9 @@ if figure_name in MAKE_FIGURES:
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 7))
 
-    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1)
-    ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt=None, ecolor="#cccccc", lw=1,
-                zorder=-1)
+    scat = ax.scatter(x, y, c=c, s=10, vmin=0, vmax=1, rasterized=True)
+    ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt="none", ecolor="#cccccc", lw=1,
+                zorder=-1, rasterized=True)
     ax.loglog()
 
     divider = make_axes_locatable(ax)
@@ -625,8 +1136,9 @@ if figure_name in MAKE_FIGURES:
     x, y, yerr, c = (x[idx], y[idx], yerr[idx], c[idx])
 
     fig, ax = plt.subplots(figsize=(8, 7))
-    scat = ax.scatter(x, y, c=c, s=1)
-    ax.errorbar(x, y, yerr=yerr, fmt=None, ecolor="#cccccc", lw=1, zorder=-1)
+    scat = ax.scatter(x, y, c=c, s=1, rasterized=True)
+    ax.errorbar(x, y, yerr=yerr, fmt="none", ecolor="#cccccc", lw=1, zorder=-1,
+                rasterized=True)
 
     ax.loglog()
 
@@ -756,6 +1268,111 @@ if figure_name in MAKE_FIGURES:
 
 
 
+figure_name = "ast_gp_hrd"
+if figure_name in MAKE_FIGURES:
+    
+    xlabel = "bp_rp"
+    ylabel = "phot_rp_mean_mag"
+    zlabels = ("ast_mu_single", "ast_sigma_single",)
+    #           "ast_mu_multiple", "ast_sigma_multiple")
+
+    K, M = (2, len(zlabels))
+    fig, axes = plt.subplots(M, K, figsize=(4 * K + 1, 4 * M))
+
+    mask = (velociraptor["absolute_rp_mag"] > -5) \
+         * (velociraptor["bp_rp"] < 4) \
+         * np.isfinite(velociraptor["rv_single_epoch_scatter"])
+
+    limits = dict(bp_rp=(-0.25, 4),
+                  phot_rp_mean_mag=(13, 6),
+                  absolute_rp_mag=(10, -5))
+
+    plot_binned_statistic_kwds = dict(function="median", bins=100,
+                                      xlabel=latex_labels.get(xlabel, xlabel),
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=mask, 
+                                      subsample=100000, min_entries_per_bin=5)
+
+    for ax_row, zlabel in zip(axes, zlabels):
+
+        for ax, ylabel in zip(ax_row, ("phot_rp_mean_mag", "absolute_rp_mag")):
+
+            plot_binned_statistic(
+                velociraptor[xlabel],
+                velociraptor[ylabel],
+                velociraptor[zlabel],
+                ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+                **plot_binned_statistic_kwds)
+
+            ax.xaxis.set_major_locator(MaxNLocator(6))
+            ax.yaxis.set_major_locator(MaxNLocator(6))
+
+            ax.set_xlim(limits.get(xlabel, None))
+            ax.set_ylim(limits.get(ylabel, None))
+
+            ax.set_title(latex_labels.get(zlabel, zlabel))
+
+        #cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
+        #cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{single}$")
+
+    for ax in np.array(axes).flatten():
+        ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+figure_name = "ast_gp_wrt_params"
+if figure_name in MAKE_FIGURES:
+    
+    from matplotlib.colors import LogNorm
+
+    xlabels = ("bp_rp",
+               "phot_rp_mean_mag",
+               "absolute_rp_mag")
+
+    ylabels = ("ast_mu_single", "ast_sigma_single")
+    
+    K, M = (len(xlabels), len(ylabels))
+    fig, axes = plt.subplots(M, K, figsize=(4 * K, 4 * M))
+
+    mask = np.isfinite(velociraptor["astrometric_unit_weight_error"])
+
+    plot_binned_statistic_kwds = dict(function="count", bins=250,
+                                      cmap="Blues", mask=mask, 
+                                      subsample=None, min_entries_per_bin=1,
+                                      norm=LogNorm())
+
+    for ax_row, xlabel in zip(axes.T, xlabels):
+
+        for ax, ylabel in zip(ax_row, ylabels):
+
+            plot_binned_statistic(
+                velociraptor[xlabel],
+                velociraptor[ylabel],
+                velociraptor[xlabel],
+                ax=ax, 
+                xlabel=latex_labels.get(xlabel, xlabel),
+                ylabel=latex_labels.get(ylabel, ylabel),
+                **plot_binned_statistic_kwds)
+
+            ax.xaxis.set_major_locator(MaxNLocator(6))
+            ax.yaxis.set_major_locator(MaxNLocator(6))
+
+            ax.set_xlim(np.sort(common_kwds.get("{}.limits".format(xlabel), None)))
+            ax.set_ylim(0, max(ax.get_ylim()))
+        
+        #cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
+        #cbar.set_label(r"\textrm{single star fraction} $\tau_\textrm{single}$")
+
+    for ax in np.array(axes).flatten():
+        ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
+
+    fig.tight_layout()
+    savefig(fig, figure_name)
+
+
+
+
 # Cross-match against Soubiran catalog only if we have to.
 if any(["soubiran" in figure_name.lower() for figure_name in MAKE_FIGURES]):
 
@@ -794,14 +1411,15 @@ if figure_name in MAKE_FIGURES:
     positive = K_est > 0
     
     axes[1].scatter(K_est[positive],
-                    vl_soubiran_subset["rv_tau_single"][positive], s=10)
+                    vl_soubiran_subset["rv_tau_single"][positive], 
+                    s=10, rasterized=True)
     
     xlim = axes[1].get_xlim()
     axes[1].errorbar(K_est[positive], 
                      vl_soubiran_subset["rv_tau_single"][positive],
                      xerr=np.min([K_est_err[positive], K_est[positive] - 1e-4], axis=0),
-                     fmt=None, ecolor="#CCCCCC", zorder=-1, 
-                     linewidth=1, capsize=0)
+                     fmt="none", ecolor="#CCCCCC", zorder=-1, 
+                     linewidth=1, capsize=0, rasterized=True)
     axes[1].set_xlim(xlim)
 
     axes[1].set_xlabel(r"$K_{est} \textrm{ / km\,s}^{-1}$")
@@ -857,12 +1475,53 @@ if figure_name in MAKE_FIGURES:
 
     axes[0].set_yticks([])
 
-    axes[1].scatter(v, K_est, s=10)
+    axes[1].scatter(v, K_est, s=10, rasterized=True)
     
     axes[1].errorbar(v, K_est,
                      yerr=np.min([K_est_err, K_est - 1e-4], axis=0),
-                     fmt=None, ecolor="#CCCCCC", zorder=-1, 
-                     linewidth=1, capsize=0)
+                     fmt="none", ecolor="#CCCCCC", zorder=-1, 
+                     linewidth=1, capsize=0, rasterized=True)
+
+    axes[1].set_ylabel(r"$K_{est} \textrm{ / km\,s}^{-1}$")
+    axes[1].set_xlabel(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
+    
+    for ax in np.array(axes).flatten():
+        ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
+
+    fig.tight_layout()
+
+    notable = (vl_huang_subset["rv_tau_single"] < 0.6) \
+            * (K_est > 0)
+
+    savefig(fig, figure_name)
+
+
+
+figure_name = "rv_huang_hist2"
+if figure_name in MAKE_FIGURES:
+
+    vl_huang_subset = velociraptor[vl_huang_ids]
+    K_est, K_est_err = estimate_K(vl_huang_subset["rv_single_epoch_scatter"],
+                                  vl_huang_subset["rv_mu_single"],
+                                  vl_huang_subset["rv_sigma_single"],
+                                  vl_huang_subset["rv_mu_single_var"],
+                                  vl_huang_subset["rv_sigma_single_var"])
+
+
+    fig, axes = plt.subplots(2, 1, figsize=(4, 8))
+
+    v = vl_huang_subset["rv_tau_single"]
+    axes[0].hist(v[np.isfinite(v)], bins=100, normed=True, alpha=0.5)
+    axes[0].set_xlabel(latex_labels["rv_tau_single"])
+
+    axes[0].set_yticks([])
+
+    axes[1].scatter(v, K_est, s=10, rasterized=True)
+    
+    axes[1].errorbar(v, K_est,
+                     yerr=np.min([K_est_err, K_est - 1e-4], axis=0),
+                     fmt="none", ecolor="#CCCCCC", zorder=-1, 
+                     linewidth=1, capsize=0, rasterized=True)
 
     axes[1].set_ylabel(r"$K_{est} \textrm{ / km\,s}^{-1}$")
     axes[1].set_xlabel(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
