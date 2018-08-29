@@ -267,7 +267,7 @@ SELECT *
 \noindent{}This query returned \NumberOfSourcesInSubset\ sources.
 
 
-\section{Method} \label{sec:method}
+\section{Methods} \label{sec:method}
 
 We assume that for a sample of sources with similar properties:
 \begin{itemize}
@@ -292,9 +292,8 @@ with $\teff \approx 6000\,\textrm{K}$ will be higher than the jitter of single s
 $\teff \approx 5000\,\textrm{K}$, all else being equal. For these reasons, in order to evaluate whether 
 a source is more likely to be a single star or a stellar multiple, we must consider 
 the jitter in context with other sources that have a similar properties (\bp\ - \rp\ colour,
-apparent \rp\ magnitude, and absolute \rp\ magnitude).\footnote{The magnitude in any band would be sufficient. Throughout
-this work we chose the \rp\ band because its wavelength range most closely overlaps 
-with that of the Radial Velocity Spectrograph on board \Gaia.} However, we cannot reliably describe a quantitative
+apparent magnitude, and absolute magnitude).\footnote{The magnitude in any band would be sufficient. Throughout this work we chose the \rp\ band for radial velocity data because the wavelength of the \rp\ band most closely overlaps with that of the Radial Velocity Spectrograph on board \Gaia. For similar reasons we use the $G$ band magnitudes for astrometry data.}
+However, we cannot reliably describe a quantitative
 relationship for \emph{how} exactly the jitter of a single star is
 expected to vary given some source properties. For these reasons
 we chose to adopt a flexible non-parametric model for stellar multiplicity, primarily
@@ -311,7 +310,7 @@ for every source, this procedure is largely independent between two sources: the
 constraint requiring the estimated jitter to be smooth across source parameter space. At the second step we use a Gaussian process to model the jitter for single stars across
 source parameter space, and enforce smoothness. We illustrate our procedure in Figure \ref{fig:schematic} and describe it in more detail below.
 
-\subsection{Non-parametric model}
+\subsection{Two component mixture model}
 
 When considering the (radial velocity or astrometric) jitter  for a \Gaia\ source of interest,
 we select $N$ sources in a `\emph{ball}' that have similar \bp\ - \rp\ colour, apparent \rp\ magnitude, and absolute \rp\ magnitudes as the source of interest. We chose $N = 1024$ in order to ensure that the sample is large enough such that
@@ -470,15 +469,143 @@ from others}
 
 \subsubsection*{Step 3: Evaluating probability and system properties}
 \end{comment}
- 
- 
-We performed this procedure and optimized this mixture model for $K = 5000$ \todo{randomly}
-chosen sources, giving us noisy estimates of the astrometric and radial velocity jitter
-for sources across the Hertszprung-Russell diagram. In theory we could have repeated the
-procedure above for all sources, but we were computationally limited  by the number of
-sources that we could use in a Gaussian process.
 
-\subsection{Gaussian processes}
+
+
+ 
+We \todo{randomly} selected $K = 5000$ \Gaia\ sources of interest and performed the procedure
+described above, where we select a ball of similar sources, and then fit the jitter 
+distributions with a two-component mixture model. We numerically optimised this model 
+using the \texttt{L-BFGS-B} optimisation algorithm \citep{lbfgsb}. In theory we could repeat this procedure
+for all \Gaia\ sources as the problem is embarrassingly parallel. In practice we are
+computationally limited by the number of sources that we can include in our Gaussian process
+model.
+
+
+\subsection{Gaussian process model}
+
+The procedure of selecting comparison sources and optimising a two-component mixture model
+is largely independent between similar sources. That is to say that even if two sources have very
+similar properties, there is no constraint stating that the estimated single-star jitter
+between those two sources should be similar. There is similarly no constraint that they 
+should vary smoothly with respect to the source properties, even though we expect that they
+ought to vary smoothly, albeit by some complex relationship that is non-trivial to describe.
+For these reasons we chose to use a Gaussian process model to parameterise the covariance
+between data points, where here we will treat our noisy estimates of the jitter parameters
+$\{\mu_\textrm{s},\sigma_\textrm{s},\mu_\textrm{m},\sigma_\textrm{m}\}$ as the data. 
+
+Gaussian processes are specified by the use of kernels \citep[see][for an thorough introduction]{Rasmussen:2005}. These kernel functions model
+the covariance structure between data points (e.g., $\mu_\textrm{s}$) instead of directly
+modelling the data, providing a flexible generative model for data typically with only very
+few hyperparameters. A detailed discussion of kernel choice is beyond the scope of this work \citep[see Chapter 4 of][]{Rasmussen:2005}.
+We chose to use the sum of a squared-exponential kernel function \citep{someone} and a Mat\'ern-3/2
+function \citep{someone}, with a white noise component $\sigma$ such that the combined kernel is
+\begin{equation}
+k(r) = k_1(r) + k_2(r)
+\end{equation}
+\noindent{}where
+\begin{eqnarray}
+k_1(r^2) & = & \exp\left(-\sqrt{r^2}\right) \\
+k_2(r^2) & = & \left(1 + \sqrt{3r^2}\right)\exp\left(-\sqrt{3r^2}\right) \quad .
+\end{eqnarray}
+
+We allow a different scale length in each dimension, and there are three dimensions of
+$\textbf{x}$ (\bp\ - \rp\ colour, absolute magnitude and apparent magnitude),
+leading to 6 hyperparameters to describe the kernel functions. The addition of a white
+noise component and a mean model brings the total number of unknown hyperparameters to 8
+for each Gaussian process model. We construct a different Gaussian process for each 
+jitter parameter (e.g., $\mu_\textrm{s}$, $\sigma_\textrm{s}$).
+
+
+We constructed this Gaussian process model and optimized the hyperparameters using
+\texttt{george}  \citep{george, others}. With these models we then made posterior
+predictions of the jitter properties for all \todo{X} \Gaia\ sources in our subset.
+With these predictions we evaluated the log-likelihood of each \Gaia\ source being
+drawn from a single star distribution $\mathcal{L}_\textrm{s}$ and a stellar
+multiple $\mathcal{L}_\textrm{m}$
+
+\todo{log-L functions}
+
+\noindent{}and evaluated the probability of each \Gaia\ source being a single star,
+given the radial velocity jitter or astrometric jitter:
+
+\todo{probabilityy functions}
+
+We assume the astrometric observations are independent from the radial velocity
+observations, and combine this information to evaluate the probability of a
+\Gaia\ source being a single star
+\begin{equation}
+	\tau_\textrm{single} = \todo{etc}
+\end{equation}
+\noindent{}where a $\tau_\textrm{single}$ value of 1 indicates the source is
+fully consistent with being a single star, and a value of 0 indicates the
+source is a stellar multiple (e.g., a binary or trinary system). We provide
+estimates of $\tau_\textrm{rv}$ just based on radial velocity data,
+$\tau_\textrm{ast}$ based on only astrometric data, and $\tau_\textrm{single}$
+based on all radial velocity and astrometric data.
+
+\todo{estimates of uncertainty on $\tau$, and some brief cautionary  notes on using  $\tau$, while we have the readers' attention}
+
+
+\subsection{Partial characterisation of stellar multiples}
+
+$\tau_\textrm{single}$ provides an estimate on whether a source is a single star. 
+If a source is not consistent with being a single star (i.e., $\tau_\textrm{single} \approx 0$),
+then we do not attempt to make any inferences as to whether the source is a binary
+system, a trinary, or higher stellar multiple: we simply assume that the source must
+be a binary system. This -- and other assumptions -- have implications for our
+partial characterisation of binary systems.
+
+We adopt the following conservative criteria for establishing a source as being a
+binary system:
+\begin{eqnarray}
+\todo{\textrm{sum hard cuts}} \quad .
+\end{eqnarray}
+
+There are \todo{X} sources in our subset that meet this criteria (\todo{X\%} of \todo{Y} sources).
+
+\subsubsection{The radial velocity semi-amplitude, $K_1$}
+
+For these systems with radial velocity measurements we estimate the radial velocity semi-amplitude
+$K_1$ of the primary from the radial velocity jitter that is in excess of what we would expect for
+a single star with the same properties
+\begin{equation}
+	K_1 \approx \RVJitter - \mathcal{GP}_{\mu,s} \quad .
+\end{equation}
+\todo{best way to express this}
+
+\noindent{}and estimate the error in $K_1$ by propagating all sources of parameter uncertainty
+\todo{from the GP and the sigma etc,...}.
+
+\subsubsection{Orbital period $P$}
+
+A comparison with \cite{SB9} reveals that we reliably detect RV binaries with periods between 
+X and Y days, consistent with our expectations: the second \Gaia\ data release includes observations
+spanning Z months (half of Y), and only half of the orbital period is required to characterise the
+radial-velocity semi-amplitude of the system. However, for systems with longer periods that we
+identify as a binary, our estimate of the radial velocity semi-amplitude will be underestimated 
+approximately by the fraction of the observing span relative to the true orbital period.
+These are coarse approximations, because most \Gaia\ sources are only observed about once a month,
+but they  give qualitative intuition for what is the shortest and longest orbital period that
+is detectable by RV variations.
+
+\subsubsection{Eccentricity $e$}
+
+\todo{Periodicity, eccentricity from The Joker}
+
+\subsubsection{Inclination angle $i$}
+
+- Estimate astrometric excess for systems that are `clearly' astrometric  binaries
+
+%- \todo{is the astrometric \textbf{excess} comparable between photometric magnitudes -- eg can that be used to translate to tangential velocities}
+% OMG YES IT IS
+
+- Eclipsing binaries to translate the excess astrometric jitter to tangential velocities
+
+- Inclination angles for some subset
+
+
+%- Photometric variability of sources that are astrometric binaries and appear to be eclipsing (e.g., should have RVs but don't)? Or just EBs compared to a sample of single stars with similar properties? Or just EBs? Or nothing at all?
 
 
 
@@ -567,6 +694,17 @@ sources that we could use in a Gaussian process.
 
 
 \section{Results} \label{sec:results}
+
+\todo{We confirm that most stars are in binaries.}
+
+- First convince the reader that we have measured something
+
+- Comparisons: SB9, APW, et cetera
+
+- Binary fraction as a  function  of everything
+
+- Number of binaries detected as a function of things
+
 
 \section{Discussion} \label{sec:discussion}
 
