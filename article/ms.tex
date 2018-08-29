@@ -156,11 +156,10 @@ noteworthy systems that would benefit from additional observations.
 
 \section{Data} \label{sec:data}
 
-There are many ways that binaries can be reliably identified using \Gaia\
-data, including radial velocity measurements, astrometry, and photometry.
-These data are sensitive to characterising stellar multiplicity in 
-different ways. Here we describe the data that we use from the second
-\Gaia\ data release \citep{Lindegren:2018} before defining our model.
+Stellar multiplicity can be inferred from \Gaia\ data using radial velocity
+measurements, astrometry, and photometry. These data are sensitive in different 
+ways. Here we describe the data that we use from the second \Gaia\ data 
+release \citep{Lindegren:2018} before we define our methods.
 
 %Here we define a model that we will use to detect and 
 %characterise stellar multiples from radial velocity and astrometric data,
@@ -196,22 +195,22 @@ velocity jitter represents the minimum uncertainty with which \Gaia\ can measure
 radial velocity for a star of that colour, apparent magnitude, and absolute magnitude.
 Stars with bluer colours have fewer absorption lines with deeper wings, and fainter stars
 have on average lower signal-to-noise (S/N) ratios, both of which result in noisier radial
-velocity measurements. The absolute magnitude is similarly important, as giant stars have
-narrow absorption lines than main-sequence stars of the same temperature and colour. For stellar multiples, the source radial velocity jitter will be the quadrature sum of the expected jitter for the primary (if it were a single star) and a contribution from the radial velocity semi-amplitude of the orbit.
+velocity measurements. The absolute magnitude is similarly important, as giant stars have narrow absorption lines than main-sequence stars of the same temperature and colour. 
+For sources that are stellar multiples, the radial velocity jitter will be the quadrature sum
+of the expected jitter for the primary (if it were a single star), and a contribution from the
+radial velocity semi-amplitude of the orbit.
 
-Some sources in \Gaia\ do not have reported radial velocities even though they are
-apparently bright enough and within a suitable \bp\ - \rp\ colour range.  The likely
-explanation for these situations is that the \Gaia\  team identified
-the source to be a double-lined spectroscopic binary, and there is no utility in
-reporting a point estimate of the \emph{source} radial velocity and associated error.
-Other explanations are also possible, which implies that we cannot use the \emph{lack}
-of radial velocity as a robust identifier of stellar multiplicity. \todo{In the following
-Sections}
-% Show it ehre?
-we demonstrate that for sources that do not have reported radial velocities -- and 
-sources of similar apparent magnitude and colour \emph{do} have radial velocities --
-their astrometric jitter is usually sufficient to distinguish single stars from stellar
-multiples.
+Some sources in \Gaia\ DR2 do not have reported radial velocities even though they are
+apparently bright enough and within a suitable \bp\ - \rp\ colour range. The two most
+likely explanations are that either the \Gaia\ team identified the source to be a
+double-lined spectroscopic binary, or the radial velocity error was larger than 20\,km\,s$^{-1}$,
+and so the source radial velocity was removed. While it may be appealing to use the \emph{lack}
+of radial velocity measurement as an indicator of stellar multiplicity, we show in Appendix A
+that such an approach is problematic due to completeness, and other complications arising from
+the initial \Gaia\ source catalog. However, in the following sections we show that for 
+sources that do not have reported radial velocities -- and it has an apparent magnitude 
+and colour that suggests it ought to have a radial velocity reported -- the astrometric 
+jitter is often sufficient to identify stellar multiples.
 
 % todo:  Figure showing distribution of astrometric unit weight error.
 
@@ -225,8 +224,7 @@ position.
 %There are many other sources of astrometric jitter, but here we show 
 %that the principle effect of astrometric excess noise is due to stellar 
 %companions.
-We make use of the astrometric unit weight error $u$ to measure astrometric
-jitter
+We make use of the astrometric unit weight error $u$ 
 \begin{eqnarray}
 	u = \sqrt{\frac{\chi^2_{al}}{N_{obs,al} - 5}} \label{eq:astrometric_unit_weight_error}
 \end{eqnarray}
@@ -244,7 +242,10 @@ consistent with a single star model), but using the astrometric unit weight
 error allows us to distinguish astrometric binaries in a much larger sample.
 And like the radial velocity jitter, the unit weight astrometric error of a
 single source must be considered in context with stars of similar colour 
-and apparent magnitude (but not necessarily absolute magnitude).
+and apparent magnitude (but not necessarily absolute magnitude). For lack of
+a more descriptive term, throughout this work we will refer to the astrometric
+unit weight error as the \emph{astrometric jitter}, similar to how we refer
+to the standard deviation of radial velocities as the \emph{radial velocity jitter}.
 
 
 % todo: what ADQL queries did we do?
@@ -252,12 +253,10 @@ and apparent magnitude (but not necessarily absolute magnitude).
 \subsection{\texttt{ADQL} query}
 
 We restrict our work to the brightest $\sim{}10^7$ sources in \Gaia\ DR2.
-About 70\% of sources in this subset have reported radial velocities,
-allowing us to identify spectroscopic binaries, and this subset provides
-a good sample of sources to test the precision to which we can identify
-astrometric binaries. Specifically, we executed the following Astronomical Data Query
-Language \citep[\texttt{ADQL};][]{someone} query on \ESA\ \Gaia\ archive
-\citep{esa_gaia_archive}:
+About 70\% of sources in this subset have reported radial velocities, and
+this subset is relatively close to the Sun. Specifically, we executed the
+following Astronomical Data Query Language \citep[\texttt{ADQL};][]{someone} 
+query on \ESA\ \Gaia\ archive \citep{esa_gaia_archive}:
 
 \begin{minted}[style=friendly]{postgresql}
 SELECT *
@@ -270,65 +269,96 @@ SELECT *
 
 \section{Method} \label{sec:method}
 
-We assume that for a sample of sources with similar \bp\ - \rp\ colours
-and apparent \rp\ magnitudes -- and absolute \rp\ magnitudes, if radial velocities
-are being considered -- the distribution of jitter is a mixture of two components:
+We assume that for a sample of sources with similar properties:
+\begin{itemize}
+	\item \bp\ - \rp\ colours;
+	\item apparent \rp\ magnitude; and
+	\item absolute \rp\ magnitude,
+\end{itemize}
+\noindent{}the distribution of jitter (in astrometry or radial velocity)
+is a mixture of two components:
 
 \begin{enumerate}
 \item \emph{single-star systems}, where the jitter represents the minimum noise that 
-	   \Gaia\ can measure for a source with those properties (e.g., a source with
-	   that \bp\ - \rp\ colour, apparent \rp\ magnitude, and perhaps absolute \rp\
-	   magnitude);
+	   \Gaia\ can measure for a source with those properties,
       
 \item \emph{higher-order star systems}, where the jitter is significantly higher 
 	  than what is measured for single-star systems of similar properties.
 \end{enumerate}
 
 We further assume that the jitter for a single star will change depending on the
-\bp\ - \rp\ colour, the apparent magnitude, and the absolute magnitude. For example, 
-the mean radial velocity jitter of single stars with $\teff \approx 6000\,\textrm{K}$
-will be higher than the jitter of single stars with $\teff \approx 5000\,\textrm{K}$, 
-with all else being (nearly) equal. Similarly, the minimum radial velocity jitter
-for giant stars is expected to be lower on average than for main-sequence stars of
-the same colour, as giant stars have narrower absorption lines than main-sequence
-stars of the same colour, allowing for a more precise measurement of the radial
-velocity. However, this effect will not affect the astrometric jitter: the minimum
-astrometric jitter for a main-sequence star and a giant star of the same temperature
-is likely to be indistinguishable. For these reasons, in order to evaluate whether 
+source properties. For example, the mean radial velocity jitter of single stars 
+with $\teff \approx 6000\,\textrm{K}$ will be higher than the jitter of single stars with
+$\teff \approx 5000\,\textrm{K}$, all else being equal. For these reasons, in order to evaluate whether 
 a source is more likely to be a single star or a stellar multiple, we must consider 
-the jitter in context with other sources that have a similar \bp\ - \rp\ colour, 
-apparent \rp\ magnitude, and in the case of radial velocity jitter, the absolute
-\rp\ magnitude.\footnote{The magnitude in any band would be sufficient. Throughout
+the jitter in context with other sources that have a similar properties (\bp\ - \rp\ colour,
+apparent \rp\ magnitude, and absolute \rp\ magnitude).\footnote{The magnitude in any band would be sufficient. Throughout
 this work we chose the \rp\ band because its wavelength range most closely overlaps 
 with that of the Radial Velocity Spectrograph on board \Gaia.} However, we cannot reliably describe a quantitative
-relationship for \emph{how} exactly the astrometric and radial velocity jitter is
-expected to vary for a single star given some source properties. For these reasons
+relationship for \emph{how} exactly the jitter of a single star is
+expected to vary given some source properties. For these reasons
 we chose to adopt a flexible non-parametric model for stellar multiplicity, primarily
 conditioned on the assumption that if we select enough sources with \emph{similar}
 properties then within that subset of similar stars there exists \emph{some} single stars 
-and \emph{some} stellar multiples.
+and \emph{some} stellar multiples -- even if we do not necessarily know \emph{a priori}
+which sources are single stars, and which are stellar multiples.
 
-We illustrate our approach in Figure \ref{fig:npm_schematic}, which can be qualitatively
-described by the following steps. When considering the radial velocity jitter for a
-\Gaia\ source of interest, we select $N$ sources that have a similar \bp\ - \rp\ colour,
-apparent \rp\ magnitude, and absolute \rp\ magnitude. We then fit the distribution of
-radial velocity jitter $\RVJitter$ as a mixture of two components: a normal distribution
-to represent single stars, and a log-normal distribution to represent stellar multiples.
-We perform these steps for $\approx10^4$ sources. While this process approximately maps
-how the radial velocity jitter of single (and multiple) stars varies across the Hertszprung-Russell
-diagram, each source of interest is considered independent from all others. For example,
-for three sources that are all indistinguishable from each other in \bp\ - \rp\ colour, 
-apparent \rp\ magnitude, and absolute \rp\ magnitude, the procedure we described above
-treats the fitting of these three mixture models as entirely independent of each other,
-even though we suspect that the parameters of the three mixture models ought to be 
-identical. In other words: the procedure as described does not enforce any smoothness.
-Given enough data this is not a problem for densely-populated regions of the 
-Hertszprung-Russell diagram as the optimized results \emph{will} be (statistically)
-indistinguishable for similar sources. In practice this poses a problem for poorly-sampled
-regions of the Hertzsprung-Russell diagram, and raises subjective questions on what
-constitutes \emph{the most} similar type of source.
 
-\todo{In the third step we apply a Gaussian process.}
+We adopt a two-step procedure for detecting stellar multiplicity. In the first step, for a
+given \Gaia\ source of interest, we consider the jitter in context of similar sources  in 
+order to measure the jitter of single stars and evaluate whether this source is more consistent with being a single star or stellar multiple. While we can repeat this process 
+for every source, this procedure is largely independent between two sources: there is no
+constraint requiring the estimated jitter to be smooth across source parameter space. At the second step we use a Gaussian process to model the jitter for single stars across
+source parameter space, and enforce smoothness. We illustrate our procedure in Figure \ref{fig:schematic} and describe it in more detail below.
+
+\subsection{Non-parametric model}
+
+When considering the (radial velocity or astrometric) jitter  for a \Gaia\ source of interest,
+we select $N$ sources in a `\emph{ball}' that have similar \bp\ - \rp\ colour, apparent \rp\ magnitude, and absolute \rp\ magnitudes as the source of interest. We chose $N = 1024$ in order to ensure that the sample is large enough such that
+it will include \emph{some} single stars and some stellar multiples, while remaining small enough
+such that all sources have very similar colours and magnitudes. There are other subtle constraints that we enforce on the sources in the `\emph{ball}'. Specifically we scale the relative dimensions such that 0.05\,mags in \bp\ - \rp\
+colour is equivalent to 0.5\,mags in absolute \rp\ magnitude, and 0.25\,mags in apparent magnitude. We further require that the ball has a minimum radius of 0.1\,mags in \bp\ - \rp\ colour and 0.5\,mags in apparent and absolute magnitude. In dense regions of parameter space there are often more than $N$ sources that are within a multi-dimensional ball of that radius. In those situations we randomly chose $N$ sources within the ball such that the randomly chosen sources approximately span the minimum radius constraint.
+
+
+
+Given that sample of $N$ similar sources, we fit a two-component mixture model to the
+distribution of jitter values. We treat the astrometric and radial velocity jitter separately.  This mixture model includes a normal (Gaussian) distribution to represent the intrinsic
+jitter for single stars, and a log-normal distribution to represent stellar multiples.
+The model parameters include the relative mixing weight $\theta$, the mean $\mu_\textrm{s}$
+and standard deviation $\sigma_\textrm{s}$ of the normal distribution, and the mean $\mu_\textrm{m}$ and standard deviation $\sigma_\textrm{m}$ of the log-normal distribution. We assume the priors
+\begin{eqnarray}
+\theta 				& \sim & \textrm{Uniform}(0, 1)    \\
+\mu_\textrm{s} 		& \sim & \textrm{Uniform}(0.5, 10) \\
+\sigma_\textrm{s} 	& \sim & \textrm{Uniform}(0, 10)   \\
+\mu_\textrm{m} 		& \sim & \textrm{Uniform}(\log[\mu_\textrm{s} + \sigma_\textrm{s}] + \sigma_\textrm{m}^2, \infty) \label{eq:mode_prior} \\
+\sigma_\textrm{m} 	& \sim & \textrm{Uniform}(0, 10)   \quad .
+\end{eqnarray}
+
+Where Eq. \ref{eq:mode_prior} ensures that the \emph{mode} of the log-normal
+distribution must be greater than $\mu_\textrm{s} + 1\sigma_\textrm{s}$, thereby
+requiring that stellar multiples must have higher jitter than single stars.
+
+
+
+%We illustrate our approach in Figure \ref{fig:npm_schematic}, which can be qualitatively
+%described by the following steps. When considering the radial velocity jitter for a
+%\Gaia\ source of interest, we select $N$ sources that have a similar \bp\ - \rp\ colour,
+%apparent \rp\ magnitude, and absolute \rp\ magnitude. We then fit the distribution of
+%radial velocity jitter $\RVJitter$ as a mixture of two components: a normal distribution
+%to represent single stars, and a log-normal distribution to represent stellar multiples.
+%We perform these steps for $\approx10^4$ sources. While this process approximately maps
+%how the radial velocity jitter of single (and multiple) stars varies across the Hertszprung-Russell
+%diagram, each source of interest is considered independent from all others. For example,
+%for three sources that are all indistinguishable from each other in \bp\ - \rp\ colour, 
+%apparent \rp\ magnitude, and absolute \rp\ magnitude, the procedure we described above
+%treats the fitting of these three mixture models as entirely independent of each other,
+%even though we suspect that the parameters of the three mixture models ought to be 
+%identical. In other words: the procedure as described does not enforce any smoothness.
+%Given enough data this is not a problem for densely-populated regions of the 
+%Hertszprung-Russell diagram as the optimized results \emph{will} be (statistically)
+%indistinguishable for similar sources. In practice this poses a problem for poorly-sampled
+%regions of the Hertzsprung-Russell diagram, and raises subjective questions on what
+%constitutes \emph{the most} similar type of source.
 
 
 \begin{figure*}
@@ -347,55 +377,33 @@ constitutes \emph{the most} similar type of source.
 
 % todo: joining sentence(s) here?
 
-\subsection*{Step 1: Selecting similar sources}
+%\subsection*{Step 1: Selecting similar sources}
 
-We construct a $k$-dimensional tree \citep[k-d tree;][]{someone} for all sources in the
-dimensions of \bp\ - \rp\ colour, apparent \rp\ magnitude, and absolute \rp\ magnitude.
-When doing so we scale the dimensions such that \todo{0.1}\,mags in \bp\ - \rp\ colour is
-approximately equal to \todo{1} magnitude in apparent \rp\ magnitude and \todo{1} magnitude in 
-absolute \rp\ magnitude. We use this $k$-d tree for selecting a `ball' of similar
-stars for a given source.
+%We construct a $k$-dimensional tree \citep[k-d tree;][]{someone} for all sources in the
+%dimensions of \bp\ - \rp\ colour, apparent \rp\ magnitude, and absolute \rp\ magnitude.
+%When doing so we scale the dimensions such that \todo{0.1}\,mags in \bp\ - \rp\ colour is
+%approximately equal to \todo{1} magnitude in apparent \rp\ magnitude and \todo{1} magnitude in 
+%absolute \rp\ magnitude. We use this $k$-d tree for selecting a `ball' of similar
+%stars for a given source.
 
-We enforce a number of constraints when selecting similar stars. For each source
-we require the multi-dimensional `ball' to include at least \todo{128} sources.
-We further require that the radius of the ball extends to at least \todo{0.05}\,mags in 
-\bp\ - \rp\ colour, \todo{0.5}\,mags in apparent \rp\ magnitude, and \todo{0.5}\,mags in absolute
-\rp\ magnitude. If the initial query of \todo{128} points does not extend wide enough to
-meet our constraints on minimum radius, we extend the radius (linearly in each scaled)
-dimension until the minimum constraints on radii are met. Our minimum radii constraints
-imply that there will be many (e.g., $>>\todo{128}$) points returned in dense regions of the
-Hertszprung-Russell diagram. In these situations we then subsample the selected points
-to return a random \todo{1024} sources in any ball, while enforcing our constraints on
-minimum radii. As a result, the number of `similar' sources selected will range from
-a minimum of \todo{128} to a maximum of \todo{1024}, and the minimum radii constraints on various
-dimensions are always maintained.
+%We enforce a number of constraints when selecting similar stars. For each source
+%we require the multi-dimensional `ball' to include at least \todo{128} sources.
+%We further require that the radius of the ball extends to at least \todo{0.05}\,mags in 
+%\bp\ - \rp\ colour, \todo{0.5}\,mags in apparent \rp\ magnitude, and \todo{0.5}\,mags in absolute
+%\rp\ magnitude. If the initial query of \todo{128} points does not extend wide enough to
+%meet our constraints on minimum radius, we extend the radius (linearly in each scaled)
+%dimension until the minimum constraints on radii are met. Our minimum radii constraints
+%imply that there will be many (e.g., $>>\todo{128}$) points returned in dense regions of the
+%Hertszprung-Russell diagram. In these situations we then subsample the selected points
+%to return a random \todo{1024} sources in any ball, while enforcing our constraints on
+%minimum radii. As a result, the number of `similar' sources selected will range from
+%a minimum of \todo{128} to a maximum of \todo{1024}, and the minimum radii constraints on various
+%dimensions are always maintained.
 
 % maximum ball radius
 
 
-\subsection*{Step 2: Fitting the two-component mixture}
-
-We fit a two-component mixture model to the distribution of radial velocity jitter for
-all similar sources selected through Step 1. This mixture model includes a normal
-distribution to represent the intrinsic jitter for single stars, and a log-normal
-distribution to represent stellar multiples. Specifically the model parameters include
-a mixing weight parameter $\theta$ that is constrained between $(0, 1)$, the mean 
-$\mu_{s}$ and standard deviation $\sigma_{s}$ of the normal distribution,
-and the mean $\mu_{m}$ and standard deviation $\sigma_{m}$ of the 
-log-normal distribution. 
-
-We assume a beta prior on $\theta$  such that $\theta \sim \mathcal{B}\left(5, 5\right)$
-and require that $\sigma_{s}$ and $\sigma_{m}$ are larger than zero.
-Depending on the distribution of the radial velocity jitter, we often found this mixture
-challenging to optimize because the log-normal distribution could easily account for 
-most of the observed distribution, which tended the mixing weight to zero and implied
-that all selected sources were stellar multiples. To avoid this situation we placed a
-constraint on the mean of the log-normal distribution to ensure that the \emph{mode}
-of the log-normal distribution is larger than $\mu_{s} + 1\sigma_{s}$ such that
-\begin{eqnarray}
-%	\mu_{s} + 5\sigma_{s} & > & \exp\left(\mu_{m} - \sigma_{m}^2\right) \label{eq:rvm_lower_bound} \\
-	\mu_{s} + 1\sigma_{s} & < & \exp\left(\mu_{m} - \sigma_{m}^2\right) \label{eq:rvm_upper_bound} \quad .
-\end{eqnarray}
+%\subsection*{Step 2: Fitting the two-component mixture}
 
 \begin{comment}
 However, we found that this constraint alone was insufficient. Often the mode would
@@ -446,6 +454,7 @@ and \ref{eq:rvm_lower_bound2} leads to the prior
 We found these priors were sufficient to ensure numerical stability and efficiency.
 \end{comment}
 
+\begin{comment}
 Wherever possible we initialised the model parameters from nearby points (within the
 ball selected by the k-d tree) where an optimised result already exists. This was primarily to minimise
 computational cost; the initialisation did not have an impact on the result. 
@@ -460,13 +469,17 @@ parallel, and illustrate in Figure \ref{fig:swarm_optimisation}.
 from others}
 
 \subsubsection*{Step 3: Evaluating probability and system properties}
-
+\end{comment}
  
-\todo{Bayes factors for each dimension?}
+ 
+We performed this procedure and optimized this mixture model for $K = 5000$ \todo{randomly}
+chosen sources, giving us noisy estimates of the astrometric and radial velocity jitter
+for sources across the Hertszprung-Russell diagram. In theory we could have repeated the
+procedure above for all sources, but we were computationally limited  by the number of
+sources that we could use in a Gaussian process.
 
-\todo{source properties: semi-amplitude (easy)}
+\subsection{Gaussian processes}
 
-\todo{Can we recover period and eccentricity using The Joker?}
 
 
 
@@ -498,92 +511,6 @@ from others}
 %variations, but most near-equal mass binaries would be detected more 
 %reliably through intrinsic magnitudes that are anomalously lower (brighter)
 %and bluer colours than what would be expected for a single star system.
-
-
-
-
-\subsection{SB2 Systems: Double-lined spectroscopic binaries}
-\label{sec:sb2_methods}
-
-Many sources in the second \Gaia\ data release do not have a reported radial 
-velocity, despite being bright enough ($G \lesssim 13$) and in a suitable 
-temperature range (e.g., between $\approx4000\,\textrm{K}$ and $\approx6500\,\textrm{K}$) 
-for radial velocities to be measured \citep{Cropper:2018}. The principle reason 
-why radial velocity measurements are \emph{not} reported for these stars is 
-because the \Gaia/DPAC team have identified the source to be a double-lined 
-spectroscopic binary (a so-called SB2-type system), either through a 
-composition of two stellar sources present in the spectra, or from multiple 
-(significant) modes in the cross-correlation function. In these situations it
-is not sensible to report a point estimate of the radial velocity of the point 
-source. For fainter or bluer sources, however, the radial velocity 
-may not be reported simply because it is too faint, blue, or red. 
-
-
-We calculated the completeness of radial velocity measurements (e.g., the
-fraction of sources with reported radial velocities) as a function of all 
-available source properties that might affect whether the radial velocity may
-be reported or not. This included position ($\alpha$, $\delta$, $l$, $b$),
-parallax, proper motions, apparent magnitudes, \bp\ - \rp\ colour, 
-properties of the radial velocity templates, stellar parameters ($\teff$, $\radius$, $\luminosity$),
-and other properties. The full list of properties investigated is described in
-Appendix \ref{appendix:sb2}, with corresponding figures. 
-
-In Figure \ref{fig:radial_velocity_completeness} we show the completeness as 
-a function of some pertinent properties, which demonstrate that the radial 
-velocity completeness is relatively flat until a source becomes too faint 
-(low \rp\ flux), or is either too blue or too red. We adopt conservative 
-limits for when the radial velocity completeness starts to drop with these 
-properties, and we assume that any source within the following range of 
-source parameters
-\begin{eqnarray}
-    \mathrm{phot\,\,rp\,\,mean\,\,flux} & \in & [10^{4}, 10^8] \nonumber \\
-    \mathrm{bp-rp} & \in & [X, Y] 
-    \label{eq:sb2_criteria}
-\end{eqnarray}
-\noindent{}is likely to be a double-lined spectroscopic binary (SB2) if no 
-radial velocity is reported. That is to say that we are explicitly assuming
-that if a point source meets the criteria in Equation \ref{eq:sb2_criteria} 
-and does not have a reported radial velocity measurement, then the point 
-source is an unresolved double-lined spectroscopic binary. In principle we 
-could make more realistic attempts to model the radial velocity completeness as
-a function of stellar properties rather than simply stating ``sources within
-this parameter range should have radial velocities unless they are SB2 systems'',
-but the radial velocity completeness within our specified range is reasonably
-flat.
-
-
-\todo{Some confirmation of this? The properties of SB2 candidate systems relative to others. Figure \ref{fig:sb2_histograms}.}
-
-
-We stress that our sample of SB2 type systems is calculated (or rather, deduced)
-separately to our calculations of multiplicity probability given the 
-\emph{measured} quantities from \Gaia\ like radial velocity, astrometry, and
-photometry. In Section \ref{sec:discussion} we detail some of the immediate
-limitations or interpretations of this assumption, and we emphasise that the 
-main conclusions of this work do not depend on SB2 systems. Nevertheless, we 
-\emph{strongly} 
-caution that our deductive inference of SB2 systems will be far more uncertain 
-than the binary probabilities we derive from other information. Our indicator 
-whether a star is likely a SB2 system likely suffers from more contamination
-and lower completeness compared to the probabilities we derive from other information
-(e.g., the radial velocity jitter, astrometric excess noise, and photometric 
-colours), and the contamination and completeness likely vary over some
-complex (unknown) function of parameter space. 
-
-
-
-
-\begin{figure*}
-%	\includegraphics[width=1.0\textwidth]{../figures/sb2_rvs_completeness.pdf}
-	\includegraphics[width=1.0\textwidth]{../figures/todo.png}
-    \caption{Fraction of \Gaia\ sources with reported radial velocities
-		     as a function of source properties. Within the adopted source
-		     parameter ranges (gray; see Section \ref{sec:sb2_methods})
-		     the radial velocity completeness is approximately flat.
-		     We flag sources within this range that do not have reported 
-		     radial velocities to be candidate SB2 systems.}
-    \label{fig:sb2_rvs_completeness}
-\end{figure*}
 
 
 
@@ -725,7 +652,93 @@ here.
 
 
 \section{Radial velocity completeness as a function of \Gaia\ source properties}
-\todo{Figures}
+
+
+
+\subsection{SB2 Systems: Double-lined spectroscopic binaries}
+\label{sec:sb2_methods}
+
+Many sources in the second \Gaia\ data release do not have a reported radial 
+velocity, despite being bright enough ($G \lesssim 13$) and in a suitable 
+temperature range (e.g., between $\approx4000\,\textrm{K}$ and $\approx6500\,\textrm{K}$) 
+for radial velocities to be measured \citep{Cropper:2018}. The principle reason 
+why radial velocity measurements are \emph{not} reported for these stars is 
+because the \Gaia/DPAC team have identified the source to be a double-lined 
+spectroscopic binary (a so-called SB2-type system), either through a 
+composition of two stellar sources present in the spectra, or from multiple 
+(significant) modes in the cross-correlation function. In these situations it
+is not sensible to report a point estimate of the radial velocity of the point 
+source. For fainter or bluer sources, however, the radial velocity 
+may not be reported simply because it is too faint, blue, or red. 
+
+
+We calculated the completeness of radial velocity measurements (e.g., the
+fraction of sources with reported radial velocities) as a function of all 
+available source properties that might affect whether the radial velocity may
+be reported or not. This included position ($\alpha$, $\delta$, $l$, $b$),
+parallax, proper motions, apparent magnitudes, \bp\ - \rp\ colour, 
+properties of the radial velocity templates, stellar parameters ($\teff$, $\radius$, $\luminosity$),
+and other properties. The full list of properties investigated is described in
+Appendix \ref{appendix:sb2}, with corresponding figures. 
+
+In Figure \ref{fig:radial_velocity_completeness} we show the completeness as 
+a function of some pertinent properties, which demonstrate that the radial 
+velocity completeness is relatively flat until a source becomes too faint 
+(low \rp\ flux), or is either too blue or too red. We adopt conservative 
+limits for when the radial velocity completeness starts to drop with these 
+properties, and we assume that any source within the following range of 
+source parameters
+\begin{eqnarray}
+    \mathrm{phot\,\,rp\,\,mean\,\,flux} & \in & [10^{4}, 10^8] \nonumber \\
+    \mathrm{bp-rp} & \in & [X, Y] 
+    \label{eq:sb2_criteria}
+\end{eqnarray}
+\noindent{}is likely to be a double-lined spectroscopic binary (SB2) if no 
+radial velocity is reported. That is to say that we are explicitly assuming
+that if a point source meets the criteria in Equation \ref{eq:sb2_criteria} 
+and does not have a reported radial velocity measurement, then the point 
+source is an unresolved double-lined spectroscopic binary. In principle we 
+could make more realistic attempts to model the radial velocity completeness as
+a function of stellar properties rather than simply stating ``sources within
+this parameter range should have radial velocities unless they are SB2 systems'',
+but the radial velocity completeness within our specified range is reasonably
+flat.
+
+
+\todo{Some confirmation of this? The properties of SB2 candidate systems relative to others. Figure \ref{fig:sb2_histograms}.}
+
+
+We stress that our sample of SB2 type systems is calculated (or rather, deduced)
+separately to our calculations of multiplicity probability given the 
+\emph{measured} quantities from \Gaia\ like radial velocity, astrometry, and
+photometry. In Section \ref{sec:discussion} we detail some of the immediate
+limitations or interpretations of this assumption, and we emphasise that the 
+main conclusions of this work do not depend on SB2 systems. Nevertheless, we 
+\emph{strongly} 
+caution that our deductive inference of SB2 systems will be far more uncertain 
+than the binary probabilities we derive from other information. Our indicator 
+whether a star is likely a SB2 system likely suffers from more contamination
+and lower completeness compared to the probabilities we derive from other information
+(e.g., the radial velocity jitter, astrometric excess noise, and photometric 
+colours), and the contamination and completeness likely vary over some
+complex (unknown) function of parameter space. 
+
+
+
+
+\begin{figure*}
+%	\includegraphics[width=1.0\textwidth]{../figures/sb2_rvs_completeness.pdf}
+	\includegraphics[width=1.0\textwidth]{../figures/todo.png}
+    \caption{Fraction of \Gaia\ sources with reported radial velocities
+		     as a function of source properties. Within the adopted source
+		     parameter ranges (gray; see Section \ref{sec:sb2_methods})
+		     the radial velocity completeness is approximately flat.
+		     We flag sources within this range that do not have reported 
+		     radial velocities to be candidate SB2 systems.}
+    \label{fig:sb2_rvs_completeness}
+\end{figure*}
+
+
 
 % astroquery
 % minted
@@ -743,7 +756,5 @@ here.
 
 \bibliographystyle{aasjournal}
 \bibliography{velociraptor}
-
-
 
 \end{document}
