@@ -19,6 +19,7 @@ from collections import OrderedDict
 from george import kernels
 from scipy import optimize as op
 from scipy.special import logsumexp
+from scipy.stats import binned_statistic_dd
 from time import (sleep, time) # yea it is
 
 import npm_utils as npm
@@ -61,6 +62,15 @@ relevant_label_names = list(set(relevant_label_names))
 is_suitable_source = np.all(np.isfinite(np.array(
     [data[ln] for ln in relevant_label_names])), axis=0)
 
+# Place additional restrictions for suitable sources?
+suitable_source_constraints = config.get("suitable_source_constraints", None)
+logger.info(f"Constraints for suitable sources: {suitable_source_constraints}")
+
+if suitable_source_constraints is not None:
+    for key, (lower, upper) in suitable_source_constraints.items():
+        v = np.array(data[key])
+        is_suitable_source *= (upper >= v) * (v >= lower)
+
 logger.info("There are {} suitable sources".format(sum(is_suitable_source)))
 
 # We will use all indices relative to data_subset, because if a source does not
@@ -73,7 +83,165 @@ S = len(data_subset)
 N = min(config["number_of_sources_to_fit"], S)
 
 finite_indices = np.arange(S)
-data_indices = np.random.choice(finite_indices, size=N, replace=False)
+strategy_to_select_sources = config.get("strategy_to_select_sources", "random")
+
+logger.info(f"Selecting poins by '{strategy_to_select_sources}' strategy")
+
+if strategy_to_select_sources == "random":
+
+    # Select points randomly.
+    data_indices = np.random.choice(finite_indices, size=N, replace=False)
+
+elif strategy_to_select_sources == "subsample-equispaced-grid":
+
+    # Select points by sub-sampling within a grid.
+    grid_label_names = config.get("subsample_label_names", None)
+    if grid_label_names is None:
+
+        grid_label_names = []
+        for descr, m in config["non_parametric_models"].items():
+            grid_label_names.extend(m["kdtree_label_names"])
+
+        grid_label_names = list(np.unique(grid_label_names))
+
+    logger.info(f"Using labels to build grid for sub-sampling: {grid_label_names}")
+
+    X = np.vstack([data_subset[ln] for ln in grid_label_names]).T
+
+    min_points_in_bin = config.get("minimum_points_in_grid_bin", 1)
+    affordable_points = config["number_of_sources_to_fit"]
+
+    logger.info(f"Finding the bin number that gives closest to "\
+                f"N = {affordable_points}, requiring each bin has at least "\
+                f"{min_points_in_bin} points in the bin")
+
+    intify = lambda x: int(np.round(x))
+
+    def cost(bins):
+        H, edges = np.histogramdd(X, bins=intify(bins))
+        diff = np.sum(H >= min_points_in_bin) - affordable_points
+        logger.info(f"{bins}: {diff}")
+        return diff
+
+    select_sources_opt_kwds = dict(a=10, b=100, xtol=1e-1)
+    select_sources_opt_kwds.update(config.get("select_sources_opt_kwds", {}))
+
+    logger.info(f"Opt keywords for selecting bin number: {select_sources_opt_kwds}")
+
+    bins = op.brentq(cost, **select_sources_opt_kwds)
+    bins = intify(bins)
+
+    if bins < affordable_points:
+        bins += 1
+
+    H, edges, datum_bin_index = binned_statistic_dd(X, np.arange(X.shape[0]),
+                                                    statistic="count", bins=bins,
+                                                    expand_binnumbers=True)
+
+    N = np.sum(H >= min_points_in_bin)
+    logger.info(f"Using {bins} bins in each dimension will give {N} points")
+
+    bin_indices_with_counts = np.vstack(np.where(H >= min_points_in_bin))
+
+    data_indices = -1 * np.ones(N)
+
+    logger.info("Sub-sampling grid points")
+
+    for i, bin_index in enumerate(tqdm.tqdm(bin_indices_with_counts.T)):
+
+        # There is a -1 offset between what comes back from datum_bin_index.
+        # It's one-indexed. what the actual fuck.
+        points_in_bin = np.where(
+            np.all((datum_bin_index.T - 1) == bin_index, axis=1))[0]
+
+        assert points_in_bin.size > 0
+        data_indices[i] = np.random.choice(points_in_bin, 1)
+
+    data_indices = data_indices.astype(int)
+
+
+
+elif strategy_to_select_sources == "subsample-equidensity-grid":
+
+    # Select points by sub-sampling within a grid.
+    grid_label_names = config.get("subsample_label_names", None)
+    if grid_label_names is None:
+
+        grid_label_names = []
+        for descr, m in config["non_parametric_models"].items():
+            grid_label_names.extend(m["kdtree_label_names"])
+
+        grid_label_names = list(np.unique(grid_label_names))
+
+    logger.info(f"Using labels to build grid for sub-sampling: {grid_label_names}")
+
+    X = np.vstack([data_subset[ln] for ln in grid_label_names]).T
+
+    min_points_in_bin = config.get("minimum_points_in_grid_bin", 1)
+    affordable_points = config["number_of_sources_to_fit"]
+
+    logger.info(f"Finding the bin number that gives closest to "\
+                f"N = {affordable_points}, requiring each bin has at least "\
+                f"{min_points_in_bin} points in the bin")
+
+    intify = lambda x: int(np.round(x))
+
+    get_bins = lambda N: [np.percentile(X.T[i], np.linspace(0, 100, intify(N))) \
+                          for i in range(X.shape[1])]
+
+    def cost(bins):
+        #bins = np.percentile(X, np.linspace(0, 100, intify(bins) + 1), axis=0)
+        H, edges = np.histogramdd(X, bins=get_bins(bins))
+        diff = np.sum(H >= min_points_in_bin) - affordable_points
+        logger.info(f"{bins}: {diff}")
+        return diff
+
+    select_sources_opt_kwds = dict(a=10, b=100, xtol=1e-1)
+    select_sources_opt_kwds.update(config.get("select_sources_opt_kwds", {}))
+
+    logger.info(f"Opt keywords for selecting bin number: {select_sources_opt_kwds}")
+
+    num_bins = op.brentq(cost, **select_sources_opt_kwds)
+
+    num_bins = intify(num_bins + 1 if num_bins < affordable_points else num_bins)
+    
+    bins = get_bins(num_bins)
+
+
+    H, edges, datum_bin_index = binned_statistic_dd(X, np.arange(X.shape[0]),
+                                                    statistic="count", bins=bins,
+                                                    expand_binnumbers=True)
+
+    N = np.sum(H >= min_points_in_bin)
+    logger.info(f"Using {num_bins} equi-density bins in each dimension will give {N} points")
+
+    bin_indices_with_counts = np.vstack(np.where(H >= min_points_in_bin))
+
+    data_indices = -1 * np.ones(N)
+
+    logger.info("Sub-sampling grid points")
+
+    for i, bin_index in enumerate(tqdm.tqdm(bin_indices_with_counts.T)):
+
+        # There is a -1 offset between what comes back from datum_bin_index.
+        # It's one-indexed. what the actual fuck.
+        points_in_bin = np.where(
+            np.all((datum_bin_index.T - 1) == bin_index, axis=1))[0]
+
+        assert points_in_bin.size > 0
+        data_indices[i] = np.random.choice(points_in_bin, 1)
+
+    data_indices = data_indices.astype(int)
+
+
+
+gp_kwds = dict()
+gp_use_hodlr = config.get("gp_use_hodlr", None)
+if gp_use_hodlr is not None and gp_use_hodlr is True:
+    gp_kwds.update(solver=george.HODLRSolver, 
+                   seed=config.get("random_seed", None))
+
+logger.info(f"Keywords for Gaussian process object: {gp_kwds}")
 
 
 def construct_kernel(D):
@@ -423,7 +591,7 @@ for description, npm_config in config["non_parametric_models"].items():
 
         gp = george.GP(kernel,
                        mean=np.mean(y), white_noise=np.log(np.std(y)),
-                       fit_mean=True, fit_white_noise=True)
+                       fit_mean=True, fit_white_noise=True, **gp_kwds)
 
         def nll(p):
             gp.set_parameter_vector(p)
@@ -509,11 +677,11 @@ for description, npm_config in config["non_parametric_models"].items():
 # Calculate joint likelihood.
 prefixes = [v["descriptive_prefix"] for k, v in config["non_parametric_models"].items()]
 
-ll_single = np.sum(
+ll_single = np.nansum(
     [catalog_results[f"{prefix}_ln_likelihood_single"] for prefix in prefixes],
     axis=0)
 
-ll_multiple = np.sum(
+ll_multiple = np.nansum(
     [catalog_results[f"{prefix}_ln_likelihood_multiple"] for prefix in prefixes],
     axis=0)
 

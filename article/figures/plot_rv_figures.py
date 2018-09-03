@@ -3,7 +3,7 @@ import os
 import pickle
 from astropy.io import fits
 from astropy.table import Table
-from scipy.stats import binned_statistic
+from scipy.stats import binned_statistic, binned_statistic_2d
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -43,7 +43,7 @@ MAKE_FIGURES = [
 #    "ast_gp_hrd"
 #]
 MAKE_FIGURES = [
-    "tau_single_hrd"
+    "tau_single_mainsequence_mean"
 ]
 
 
@@ -73,15 +73,16 @@ latex_labels = dict(
 )
 
 common_kwds = dict([
-    ("bp_rp.limits", (-0.25, 6.5)),
+    ("bp_rp.limits", (-0.25, 6.25)),
     ("phot_rp_mean_mag.limits", (13.0, 2.1)),
+    ("absolute_g_mag.limits", (10, -8)),
     ("absolute_rp_mag.limits", (10.5, -16)),
 ])
 
 one_to_one_line_kwds = dict(c="#666666", linestyle=":", lw=1, zorder=-1)
 
 def savefig(fig, basename):
-    prefix = f"{basename}.v{RELEASE_CANDIDATE_VERSION}"
+    prefix = f"{basename}-v{RELEASE_CANDIDATE_VERSION}"
     fig.savefig(f"{prefix}.png")
     #fig.savefig(f"{prefix}.png", dpi=150)
     print(f"Saved figure {prefix}.png")
@@ -125,14 +126,14 @@ log_K_significance = np.log10(
   /  velociraptor["rv_sigma_single"])
 
 
-figure_name = "tau_single_hrd"
+figure_name = "tau_single_mainsequence_median"
 if figure_name in MAKE_FIGURES:
 
     ordered, reverse = (True, False)
-    subsample = 10000
+    subsample = None
 
     xlabel = "bp_rp"
-    ylabels = ("absolute_rp_mag", "absolute_g_mag", "absolute_g_mag")
+    ylabels = ("absolute_g_mag", "absolute_g_mag", "absolute_g_mag")
     zlabels = ("rv_tau_single", "ast_tau_single", "tau_single")
     titles = (
         r"\textrm{radial velocity}",
@@ -142,11 +143,31 @@ if figure_name in MAKE_FIGURES:
 
     K = len(ylabels)
 
-    plot_binned_statistic_kwds = dict(function="mean", vmin=0, vmax=1, bins=100,
-                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=None,
-                                      subsample=subsample, min_entries_per_bin=5)
+    xlims = (0, 3)
+    ylims = (10, 2)
 
-    fig, axes = plt.subplots(1, K + 1, figsize=(4 * K, 4))
+    num_bins = 150
+    
+    # Use exact same bins for all panels, based on the joint information.
+    x, y, z = (velociraptor[xlabel], velociraptor[ylabels[-1]], velociraptor[zlabels[-1]])
+    mask = np.isfinite(x * y * z) \
+         * (x >= min(xlims)) * (x <= max(xlims)) \
+         * (y >= min(ylims)) * (y <= max(ylims))
+
+
+    H, xedges, yedges, binnumber = binned_statistic_2d(x[mask], 
+                                                       y[mask],
+                                                       z[mask],
+                                                       statistic="count",
+                                                       bins=num_bins)
+    bins = (xedges, yedges)
+
+    plot_binned_statistic_kwds = dict(function="median", vmin=0, vmax=1,
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=None,
+                                      subsample=subsample, min_entries_per_bin=3,
+                                      bins=bins)
+
+    fig, axes = plt.subplots(1, K, figsize=(3 * K, 3))
 
     for i, (ax, ylabel, zlabel, title) \
     in enumerate(zip(axes, ylabels, zlabels, titles)):
@@ -158,32 +179,129 @@ if figure_name in MAKE_FIGURES:
             ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
             **plot_binned_statistic_kwds)
 
-        ax.xaxis.set_major_locator(MaxNLocator(6))
-        ax.yaxis.set_major_locator(MaxNLocator(6))
+        ax.set_xlabel(latex_labels.get(xlabel, xlabel))
 
-        ax.set_xlim(common_kwds.get("{}.limits".format(xlabel), None))
-        ax.set_ylim(common_kwds.get("{}.limits".format(ylabel), None))
+        ax.xaxis.set_major_locator(MaxNLocator(5))
+        ax.yaxis.set_major_locator(MaxNLocator(5))
+
+        ax.set_xlim(xlims)
+        ax.set_ylim(ylims)
 
         ax.set_title(title)
 
-    """
-    cbar = plt.colorbar(ax.images[0], fraction=0.046, pad=0.04)
-    cbar.set_ticks([0, 0.25, 0.5, 0.75, 1.0])
+
+    cbar = plt.colorbar(ax.images[0], ax=list(axes))#=axes[-1])
     cbar.set_label(r"\textrm{single star probability} $\tau$")
-    """
-    #cbar = plt.colorbar(ax.images[0], ax=list(axes))
-    #divider = make_axes_locatable(ax)
-    #cax = divider.append_axes("right", size="5%", pad=0.05)
-    cbar = plt.colorbar(ax.images[0], cax=axes[-1])
     
-    for ax in axes[:-1]:
+    for ax in axes:
         ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
 
     fig.tight_layout()
-    cax = axes[-1]
+    fig.subplots_adjust(right=0.90)
 
-    savefig(fig, figure_name)
 
+    # Unbelievable that we have to do all this,...
+    fig.canvas.update()
+
+    cbar.ax.yaxis.set_tick_params(width=0)
+
+    cax_width = 0.02
+
+    for i in range(2):
+
+        ax_left, bottom, ax_width, height = axes[-1].get_position().bounds
+        cbar.ax.set_position([ax_left + ax_width + cax_width, bottom, cax_width, height])
+        savefig(fig, figure_name)
+
+
+
+
+figure_name = "tau_single_mainsequence_mean"
+if figure_name in MAKE_FIGURES:
+
+    ordered, reverse = (True, False)
+    subsample = None
+
+    xlabel = "bp_rp"
+    ylabels = ("absolute_g_mag", "absolute_g_mag", "absolute_g_mag")
+    zlabels = ("rv_tau_single", "ast_tau_single", "tau_single")
+    titles = (
+        r"\textrm{radial velocity}",
+        r"\textrm{astrometry}",
+        r"\textrm{joint information}"
+    )
+
+    K = len(ylabels)
+
+    xlims = (0, 3)
+    ylims = (10, 2)
+
+    num_bins = 100
+    
+    # Use exact same bins for all panels, based on the joint information.
+    x, y, z = (velociraptor[xlabel], velociraptor[ylabels[-1]], velociraptor[zlabels[-1]])
+    mask = np.isfinite(x * y * z) \
+         * (x >= min(xlims)) * (x <= max(xlims)) \
+         * (y >= min(ylims)) * (y <= max(ylims))
+
+
+    H, xedges, yedges, binnumber = binned_statistic_2d(x[mask], 
+                                                       y[mask],
+                                                       z[mask],
+                                                       statistic="count",
+                                                       bins=num_bins)
+    bins = (xedges, yedges)
+
+    plot_binned_statistic_kwds = dict(function="mean", vmin=0, vmax=1,
+                                      cmap=DEFAULT_SEQUENTIAL_CMAP, mask=mask,
+                                      subsample=subsample, min_entries_per_bin=5,
+                                      bins=bins)
+
+    fig, axes = plt.subplots(1, K, figsize=(3 * K, 3))
+
+    for i, (ax, ylabel, zlabel, title) \
+    in enumerate(zip(axes, ylabels, zlabels, titles)):
+
+        plot_binned_statistic(
+            velociraptor[xlabel],
+            velociraptor[ylabel],
+            velociraptor[zlabel],
+            ax=ax, ylabel=latex_labels.get(ylabel, ylabel),
+            **plot_binned_statistic_kwds)
+
+        ax.set_xlabel(latex_labels.get(xlabel, xlabel))
+
+        ax.xaxis.set_major_locator(MaxNLocator(5))
+        ax.yaxis.set_major_locator(MaxNLocator(4))
+
+        ax.set_xlim(xlims)
+        ax.set_ylim(ylims)
+
+        ax.set_title(title)
+
+
+    cbar = plt.colorbar(ax.images[0], ax=list(axes))#=axes[-1])
+    cbar.set_label(r"\textrm{single star probability} $\tau$")
+    
+    for ax in axes:
+        ax.set_aspect(np.ptp(ax.get_xlim())/np.ptp(ax.get_ylim()))
+
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.90)
+
+
+    # Unbelievable that we have to do all this,...
+    fig.canvas.update()
+
+    cbar.ax.yaxis.set_tick_params(width=0)
+
+    cax_width = 0.02
+
+    for i in range(2):
+
+        ax_left, bottom, ax_width, height = axes[-1].get_position().bounds
+        cbar.ax.set_position([ax_left + ax_width + cax_width, bottom, cax_width, height])
+        savefig(fig, figure_name)
 
 
 

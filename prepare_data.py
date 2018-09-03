@@ -13,9 +13,6 @@ from astropy.table import Table
 input_path = "data/gaia-sources-for-npm.fits"
 output_path = "data/gaia-sources-for-npm-colsubset.fits"
 
-input_path = "data/the-battery-star.rc.xmatch.fits"
-output_path = "data/the-battery-stars.npm.fits"
-
 def create_subset_for_npm(path, hdu=1, additional_label_names=None, **kwargs):
 
     properties = dict()
@@ -76,7 +73,11 @@ data = create_subset_for_npm(
     additional_label_names=(
         "source_id", "ra", "dec",
         "phot_rp_mean_mag",
-        "bp_rp"
+        "bp_rp",
+        "rv_nb_transits",
+        "parallax",
+        "parallax_error",
+        "phot_g_mean_mag"
     ))
 
 t = Table(data=data)
