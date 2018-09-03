@@ -55,7 +55,7 @@
 
 \begin{document}
 
-\title{Detection and partial characterisation of stellar multiplicity with Gaia}
+\title{Detection and partial characterisation of stellar multiplicity}
 
 \correspondingauthor{Andrew R. Casey}
 \email{andrew.casey@monash.edu}
@@ -81,23 +81,30 @@
 			 3941 O'Hara Street, Pittsburgh, PA 15260, USA}
 
 \author{Rosemary Mardling}
+\affiliation{School of Physics \& Astronomy, 
+			 Monash University,
+			 Wellington Rd, Clayton 3800, Victoria, Australia}
+			 
 \author{John Lattanzio}
+\affiliation{School of Physics \& Astronomy, 
+			 Monash University,
+			 Wellington Rd, Clayton 3800, Victoria, Australia}
 
-\author[0000-0003-2866-9403]{David W. Hogg}
-\affiliation{Center for Cosmology and Particle Physics, Department of Physics,
-    		 New York University, 
-		  	 726 Broadway, New York, NY 10003, USA}
-\affiliation{Center for Data Science, 
-			 New York University, 60 Fifth Ave, New York, NY 10011, USA}
-\affiliation{Max-Planck-Institut f\"ur Astronomie, 
-			 K\"onigstuhl 17, D-69117 Heidelberg}
-\affiliation{Flatiron Institute,
-			 162 Fifth Ave, New York, NY 10010, USA}
+%\author[0000-0003-2866-9403]{David W. Hogg}
+%\affiliation{Center for Cosmology and Particle Physics, Department of Physics,
+%    		 New York University, 
+%		  	 726 Broadway, New York, NY 10003, USA}
+%\affiliation{Center for Data Science, 
+%			 New York University, 60 Fifth Ave, New York, NY 10011, USA}
+%\affiliation{Max-Planck-Institut f\"ur Astronomie, 
+%			 K\"onigstuhl 17, D-69117 Heidelberg}
+%\affiliation{Flatiron Institute,
+%			 162 Fifth Ave, New York, NY 10010, USA}
 
-\author[0000-0003-0872-7098]{Adrian M. Price-Whelan}
-\affiliation{Department of Astrophysical Sciences, 
-			 Princeton University, 
-			 Princeton, NJ 08544, USA}
+%\author[0000-0003-0872-7098]{Adrian M. Price-Whelan}
+%\affiliation{Department of Astrophysical Sciences, 
+%			 Princeton University, 
+%			 Princeton, NJ 08544, USA}
 
 
 
@@ -203,16 +210,14 @@ radial velocity semi-amplitude of the orbit.
 Some sources in \Gaia\ DR2 do not have reported radial velocities even though they are
 apparently bright enough and within a suitable \bp\ - \rp\ colour range. The two most
 likely explanations are that either the \Gaia\ team identified the source to be a
-double-lined spectroscopic binary, or the radial velocity error was larger than 20\,km\,s$^{-1}$,
+double-lined spectroscopic binary, or the radial velocity error $\sigma_{\textrm{V}_\textrm{R}}^\textrm{MTA}$ exceeded 20\,km\,s$^{-1}$ (irrespective of the number of transits),
 and so the source radial velocity was removed. While it may be appealing to use the \emph{lack}
-of radial velocity measurement as an indicator of stellar multiplicity, we show in Appendix A
+of radial velocity measurement as an indicator of stellar multiplicity, we show in Appendix \ref{sec:appendix-missing-rvs}
 that such an approach is problematic due to completeness, and other complications arising from
-the initial \Gaia\ source catalog. However, in the following sections we show that for 
-sources that do not have reported radial velocities -- and it has an apparent magnitude 
-and colour that suggests it ought to have a radial velocity reported -- the astrometric 
-jitter is often sufficient to identify stellar multiples.
-
-% todo:  Figure showing distribution of astrometric unit weight error.
+the initial \Gaia\ source catalog. However, in later sections we also show that for 
+sources without reported radial velocities -- and those sources have apparent magnitudes
+and colours suggesting it ought to have a radial velocity measurement -- the astrometric 
+jitter is often sufficient to identify stellar multiples (see also Figure \ref{fig:sb2_histograms}).
 
 
 \subsection{Astrometry} \label{sec:data_astrometry}
@@ -253,8 +258,7 @@ to the standard deviation of radial velocities as the \emph{radial velocity jitt
 \subsection{\texttt{ADQL} query}
 
 We restrict our work to the brightest $\sim{}10^7$ sources in \Gaia\ DR2.
-About 70\% of sources in this subset have reported radial velocities, and
-this subset is relatively close to the Sun. Specifically, we executed the
+Specifically, we executed the
 following Astronomical Data Query Language \citep[\texttt{ADQL};][]{someone} 
 query on \ESA\ \Gaia\ archive \citep{esa_gaia_archive}:
 
@@ -264,18 +268,15 @@ SELECT *
  WHERE radial_velocity IS NOT NULL
     OR phot_rp_mean_mag <= 13
 \end{minted}
-\noindent{}This query returned \NumberOfSourcesInSubset\ sources.
+\noindent{}This query returned \NumberOfSourcesInSubset\ sources, of which
+about 70\% have radial velocities in \Gaia\ DR2.
 
 
 \section{Methods} \label{sec:method}
 
-We assume that for a sample of sources with similar properties:
-\begin{itemize}
-	\item \bp\ - \rp\ colours;
-	\item apparent \rp\ magnitude; and
-	\item absolute \rp\ magnitude,
-\end{itemize}
-\noindent{}the distribution of jitter (in astrometry or radial velocity)
+We assume that for a sample of sources with a similar \bp\ - \rp\ colour,
+apparent magnitude\footnote{The magnitude in any band is sufficient. Throughout this work we chose the \rp\ band for radial velocity data because the wavelength of the \rp\ band most closely overlaps with that of the Radial Velocity Spectrograph on board \Gaia. For similar reasons we use the G-band magnitudes for astrometry data.}, and absolute magnitude, 
+the distribution of jitter (in astrometry or radial velocity)
 is a mixture of two components:
 
 \begin{enumerate}
@@ -292,7 +293,8 @@ with $\teff \approx 6000\,\textrm{K}$ will be higher than the jitter of single s
 $\teff \approx 5000\,\textrm{K}$, all else being equal. For these reasons, in order to evaluate whether 
 a source is more likely to be a single star or a stellar multiple, we must consider 
 the jitter in context with other sources that have a similar properties (\bp\ - \rp\ colour,
-apparent magnitude, and absolute magnitude).\footnote{The magnitude in any band would be sufficient. Throughout this work we chose the \rp\ band for radial velocity data because the wavelength of the \rp\ band most closely overlaps with that of the Radial Velocity Spectrograph on board \Gaia. For similar reasons we use the $G$ band magnitudes for astrometry data.}
+apparent magnitude, and absolute magnitude).
+
 However, we cannot reliably describe a quantitative
 relationship for \emph{how} exactly the jitter of a single star is
 expected to vary given some source properties. For these reasons
@@ -609,6 +611,13 @@ is detectable by RV variations.
 
 
 
+\begin{figure*}
+	\includegraphics[width=\textwidth]{../figures/todo.png}
+%	\includegraphics[width=\textwidth]{figures/tau_single_hrd.png}
+    \caption{Two-dimensional histogram of \todo{X} showing the mean single star probability $\tau$ per bin. The three panels show probabilities calculated from different sources of information: (a) using only radial velocity jitter; (b) using only astrometric jitter; and (c) using the joint information of radial velocity and astrometric jitter. All panels share the same colour range.}
+    \label{fig:tau_single_hrd_v5}
+\end{figure*}
+
 
 
 %For higher-order star systems with longer periods, we can still find that a
@@ -643,8 +652,9 @@ is detectable by RV variations.
 
 
 \begin{figure}
-%	\includegraphics[width=0.4\textwidth]{../figures/sb2_histograms.pdf}
-	\includegraphics[width=0.4\textwidth]{../figures/todo.png}
+	\centering
+	\includegraphics[width=0.35\textwidth]{../figures/sb2_histograms.pdf}
+%	\includegraphics[width=0.4\textwidth]{../figures/todo.png}
     \caption{Distribution of 
     			(a) astrometric unit weight error (see Eq. \ref{eq:astrometric_unit_weight_error}),
 			%$u = \left(\chi_{al}^2/(N_{al} - 5)\right)^{1/2}$
@@ -654,7 +664,13 @@ is detectable by RV variations.
 				(b) photometric \bp\ - \rp\ excess factor, 				
 	 				and 
 				(c) photometric \rp\ variability (see Eq. \ref{eq:photometric_variability})
-			of candidate SB2 type systems relative to a control sample of the same size.}
+			of sources that lack radial velocities but their properties suggest they should have
+			a radial velocity measurement (red; candidate SB2 systems), and an equal-size control sample of sources
+			with similar \bp\ - \rp\ colours, apparent magnitudes, absolute magnitudes,
+			which \emph{do} have radial velocity measurements (grey). It is clear that the
+			candidate SB2 systems have systematically higher astrometric unit weight error
+			than the control sample, and a larger variance in photometric \bp\ - \rp\ excess
+			factor and photometric variability, both consistent with a secondary source.}
     \label{fig:sb2_histograms}
 \end{figure}
 
@@ -666,11 +682,6 @@ is detectable by RV variations.
 
 
 %\subsection{Photometric binaries} \label{sec:method_photometric_binaries}
-
-%\begin{eqnarray}
-%	\textrm{Amp} = \log_{10}\left(\sqrt{N_{obs,al}}\frac{\sigma_{\langle{}f_G\rangle}}{\langle{}f_G\rangle}\right) \label{eq:photometric_variability}
-%\end{eqnarray}
-
 
 
 
@@ -838,7 +849,7 @@ varying these settings does not guarantee exact replication of the results shown
 here.
 
 
-\section{Radial velocity completeness as a function of \Gaia\ source properties}
+\section{Radial velocity completeness as a function of \Gaia\ source properties} \label{sec:appendix-missing-rvs}
 
 
 
@@ -912,6 +923,12 @@ complex (unknown) function of parameter space.
 
 
 
+\todo{\begin{eqnarray}
+	\textrm{Amp} = \log_{10}\left(\sqrt{N_{obs,al}}\frac{\sigma_{\langle{}f_G\rangle}}{\langle{}f_G\rangle}\right) \label{eq:photometric_variability}
+\end{eqnarray}}
+
+
+
 
 \begin{figure*}
 %	\includegraphics[width=1.0\textwidth]{../figures/sb2_rvs_completeness.pdf}
@@ -945,6 +962,8 @@ complex (unknown) function of parameter space.
 			 triplet likely causes issues for radial velocity determination).}
     \label{fig:sb2_sky_structure}
 \end{figure*}
+
+
 
 
 
