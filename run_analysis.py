@@ -90,7 +90,7 @@ def optimize_mixture_model(index, inits=None):
     if inits is None:
         inits = npm.get_rv_initialisation_points(y)
 
-    assert np.all(np.ptp(ball, axis=0) <= 2*np.array(config["kdtree_maximum_radius"]))
+    #assert np.all(np.ptp(ball, axis=0) <= 2*np.array(config["kdtree_maximum_radius"]))
 
     # Update meta dictionary with things about the data.
     meta = dict(max_log_y=np.log(np.max(y)),
@@ -118,18 +118,23 @@ def optimize_mixture_model(index, inits=None):
         opt_kwds.update(default_opt_kwds)
 
         # Do optimization.
-        try:
-            p_opt = model.optimizing(**opt_kwds)
+        # TODO: Suppressing output is always dangerous.
+        with stan.suppress_output(config.get("suppress_stan_output", True)) as sm:
+            try:
+                p_opt = model.optimizing(**opt_kwds)
 
-        except:
-            logging.exception(f"Exception occurred when optimizing index {index}"\
-                              f" from {init_dict}:")
-            continue
+            except:
+                logging.exception(f"Exception occurred when optimizing index {index}"\
+                                  f" from {init_dict}:")
 
-        else:
-            if p_opt is not None:
-                p_opts.append(p_opt)
-                ln_probs.append(npm.ln_prob(y, 1, *npm._pack_params(**p_opt)))
+            else:
+                if p_opt is not None:
+                    p_opts.append(p_opt)
+                    ln_probs.append(npm.ln_prob(y, 1, *npm._pack_params(**p_opt)))
+
+        if p_opt is None:
+            stdout, stderr = sm.outputs
+            logging.warning(f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}")
 
     if len(p_opts) < 1:
         logging.warning("Optimization on index {} did not converge from any "\
@@ -225,7 +230,7 @@ def mp_swarm(*mp_indices, max_random_starts=3, in_queue=None, candidate_queue=No
 
 
 
-if False:
+if True:
     sp_swarm(*indices)
 
 else:
