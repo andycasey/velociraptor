@@ -32,6 +32,8 @@ require_finite_label_names:
 
 share_optimised_result_with_nearest: 0
 
+multiprocessing: true
+
 optimisation_kwds:
   verbose: false
   iter: 10000
