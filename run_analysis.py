@@ -182,9 +182,6 @@ def mp_swarm(*mp_indices, max_random_starts=3, in_queue=None, candidate_queue=No
 
     np.random.seed(seed)
 
-
-    random_start = lambda *_: (_ri.__next__(), )
-
     swarm = True
 
     while swarm:
@@ -193,16 +190,16 @@ def mp_swarm(*mp_indices, max_random_starts=3, in_queue=None, candidate_queue=No
             j, index = in_queue.get_nowait()
 
         except mp.queues.Empty:
-            logging.info("Using a random index to start")
-            continue
+            logging.info("Queue is empty")
+            break
 
         except StopIteration:
             logging.warning("Swarm is bored")
-            sleep(5)
+            break
 
         except:
             logging.exception("Unexpected exception:")
-            swarm = False
+            break
 
         else:
             if index is None and init is False:
@@ -214,27 +211,19 @@ def mp_swarm(*mp_indices, max_random_starts=3, in_queue=None, candidate_queue=No
 
             except:
                 logging.exception(f"Exception when optimizing on {index}")
-                break
-
-            out_queue.put((j, index, result, meta))
-
-            """
-            if result is not None:
-                # Candidate next 2 points
-                # (because exponential growth)
-                K = 2
-                candidate_queue.put((kdt_indices[C + 1:C + 1 + K], result))
-            """
+                out_queue.put((j, index, None, dict()))
+            
+            else:
+                out_queue.put((j, index, result, meta))
 
     return None
 
 
 
-if True:
+if not config.get("multiprocessing", False):
     sp_swarm(*indices)
 
 else:
-
     P = mp.cpu_count()
 
     with mp.Pool(processes=P) as pool:
@@ -278,17 +267,6 @@ else:
                         results[j] = npm._pack_params(**result)
 
                     pbar.update(1)
-
-
-
-
-"""
-for i, index in enumerate(tqdm.tqdm(indices)):
-
-    _, result, meta = optimize_mixture_model(index)
-    results[i] = npm._pack_params(**result)
-    metas.append(meta)
-"""
 
 
 
