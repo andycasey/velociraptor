@@ -101,21 +101,25 @@ class suppress_output(object):
         os.dup2(self.null_fds[0][0], 1)
         os.dup2(self.null_fds[1][0], 2)
 
+        print("Entering")
         return self
 
     @property
     def stdout(self):
         with open(self.null_fds[0][1], "r") as fp:
-            contents = fp.read()
-        return contents
+            stdout = fp.read()
+        return stdout        
 
     @property
     def stderr(self):
         with open(self.null_fds[1][1], "r") as fp:
-            contents = fp.read()
-        return contents
+            stderr = fp.read()
+        return stderr
 
     def __exit__(self, *_):
+
+        print("Exiting")
+
         # Re-assign the real stdout/stderr back to (1) and (2)
         os.dup2(self.save_fds[0], 1)
         os.dup2(self.save_fds[1], 2)

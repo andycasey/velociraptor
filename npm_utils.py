@@ -232,6 +232,8 @@ def query_around_point(kdtree, point, offsets=0, scales=1, minimum_radius=None,
 
 
 
+
+
 def normal_lpdf(y, mu, sigma):
     ivar = sigma**(-2)
     return 0.5 * (np.log(ivar) - np.log(2 * np.pi) - (y - mu)**2 * ivar)
@@ -345,9 +347,9 @@ def ln_prior(theta, s_mu, s_sigma, b_mu, b_sigma):
         min_mu_multiple = np.log(s_mu + s_sigma) + b_sigma**2
 
     if not (1 >= theta >= 0) \
-    or np.any(s_mu <= 0) \
-    or np.any(s_sigma <= 0) \
-    or np.any(b_sigma <= 0) \
+    or not (15 >= s_mu >= 0.5) \
+    or not (10 >= s_sigma >= 0.05) \
+    or not (1.6 >= b_sigma >= 0.20) \
     or np.any(b_mu < min_mu_multiple):
         return -np.inf
 
@@ -409,6 +411,42 @@ def nlp(params, y, L):
     return -ln_prob(y, L, *params)
 
 
+def get_rv_initialisation_points(y):
+
+    N, D = y.shape
+
+    init = dict(
+        theta=0.1,
+        mu_single=np.min([np.median(y, axis=0), 10]),
+        sigma_single=0.2,
+        sigma_multiple=0.5)
+
+    lower_mu_multiple = np.log(init["mu_single"] + init["sigma_single"]) \
+                      + init["sigma_multiple"]**2
+
+    init["mu_multiple"] = 1.1 * lower_mu_multiple
+
+
+    op_kwds = dict(x0=_pack_params(**init), args=(y, D))
+
+    nlp = lambda params, y, L: -ln_prob(y, L, *params)
+    p_opt = op.minimize(nlp, **op_kwds)
+
+    keys = ("theta", "mu_single", "sigma_single", "mu_multiple", "sigma_multiple")
+
+    init_dict = _check_params_dict(init)
+    op_dict = _check_params_dict(dict(zip(keys, _unpack_params(p_opt.x))))
+
+    # Only return valid init values.
+    valid_inits = []
+    for init in (init_dict, op_dict):
+        if np.isfinite(nlp(_pack_params(**init), y, D)):
+            valid_inits.append(init)
+
+    valid_inits.append("random")
+
+    return valid_inits
+
 
 def get_initialization_point(y):
     N, D = y.shape
@@ -421,6 +459,8 @@ def get_initialization_point(y):
         sigma_single=0.1 * np.median(y[ok], axis=0),
         sigma_multiple=0.1 * np.ones(D),
     )
+
+
 
     # mu_multiple is *highly* constrained. Select the mid-point between what is
     # OK:
