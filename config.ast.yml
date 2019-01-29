@@ -1,11 +1,11 @@
 data_path: data/gaia-sources-for-npm-colsubset.fits
-results_path: results/rv.pkl
+results_path: results/ast.pkl
 model_path: npm-1d-rv.stan
 
 kdtree_label_names:
  - bp_rp
- - absolute_rp_mag
- - phot_rp_mean_mag
+ - absolute_g_mag
+ - phot_g_mean_mag
 kdtree_minimum_points: 512
 kdtree_maximum_points: 512 # randomly sub-sample within the constraints
 kdtree_relative_scales: 
@@ -22,7 +22,7 @@ kdtree_maximum_radius:
  - 1.5
 
 predictor_label_names:
- - rv_single_epoch_scatter
+ - astrometric_unit_weight_error
 
 require_finite_label_names:
  - bp_rp
