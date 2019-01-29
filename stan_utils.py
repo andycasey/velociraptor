@@ -81,27 +81,29 @@ def sampling_kwds(**kwargs):
 class suppress_output(object):
     """ Suppress all stdout and stderr. """
 
-    def __init__(self):
+    def __init__(self, suppress_output=True):
         """
         self.null_fds = [
             os.open(os.devnull, os.O_RDWR),
             os.open(os.devnull, os.O_RDWR)
         ]
         """
-        self.null_fds = [
-            mkstemp(),
-            mkstemp()
-        ]
-        # Save the actual stdout (1) and stderr (2) file descriptors.
-        self.save_fds = [os.dup(1), os.dup(2)]
+        self.suppress_output = suppress_output
+
+        if self.suppress_output:
+            self.null_fds = [
+                mkstemp(),
+                mkstemp()
+            ]
+            # Save the actual stdout (1) and stderr (2) file descriptors.
+            self.save_fds = [os.dup(1), os.dup(2)]
 
 
     def __enter__(self):
         # Assign the null pointers to stdout and stderr.
-        os.dup2(self.null_fds[0][0], 1)
-        os.dup2(self.null_fds[1][0], 2)
-
-        print("Entering")
+        if self.suppress_output:
+            os.dup2(self.null_fds[0][0], 1)
+            os.dup2(self.null_fds[1][0], 2)
         return self
 
     @property
@@ -118,16 +120,19 @@ class suppress_output(object):
 
     def __exit__(self, *_):
 
-        print("Exiting")
-
         # Re-assign the real stdout/stderr back to (1) and (2)
-        os.dup2(self.save_fds[0], 1)
-        os.dup2(self.save_fds[1], 2)
+        if self.suppress_output:
+            os.dup2(self.save_fds[0], 1)
+            os.dup2(self.save_fds[1], 2)
 
-        # Close the null files and descriptors.
-        for fd in self.save_fds:
-            os.close(fd)
+            # Close the null files and descriptors.
+            for fd in self.save_fds:
+                os.close(fd)
 
-        for fd, p in self.null_fds:
-            os.close(fd)
-            os.unlink(p)
+            self.outputs = []
+            for fd, p in self.null_fds:
+                with open(p, "r") as fp:
+                    self.outputs.append(fp.read())
+
+                os.close(fd)
+                os.unlink(p)
