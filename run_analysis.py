@@ -96,7 +96,6 @@ if __name__ == "__main__":
     done = np.zeros(M, dtype=bool)
     queued = np.zeros(M, dtype=bool)
 
-
     def optimize_mixture_model(index, inits=None):
 
         # Select indices and get data.

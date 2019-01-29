@@ -1,0 +1,52 @@
+data_path: data/gaia-sources-for-npm-colsubset.fits
+results_path: results/gp.pkl
+model_path: npm-1d-rv.stan
+
+models:
+  rv: 
+    predictor_label_name: rv_single_epoch_scatter
+    kdt_label_names:
+      - bp_rp
+      - absolute_rp_mag
+      - phot_rp_mean_mag
+    kdtree_minimum_points: 512
+    kdtree_maximum_points: 512 # randomly sub-sample within the constraints
+    kdtree_relative_scales: 
+     - 0.05
+     - 0.50
+     - 0.25
+    kdtree_minimum_radius:
+     - 0.1
+     - 0.5
+     - 0.5
+    kdtree_maximum_radius:
+     - 0.25
+     - 2.5
+     - 1.5
+
+  ast:
+    predictor_label_name: astrometric_unit_weight_error
+    kdt_label_names:
+      - bp_rp
+      - absolute_g_mag
+      - phot_g_mean_mag
+    kdtree_minimum_points: 512
+    kdtree_maximum_points: 512 # randomly sub-sample within the constraints
+    kdtree_relative_scales: 
+     - 0.05
+     - 0.50
+     - 0.25
+    kdtree_minimum_radius:
+     - 0.1
+     - 0.5
+     - 0.5
+    kdtree_maximum_radius:
+     - 0.25
+     - 2.5
+     - 1.5
+
+random_seed: 42
+number_of_sources: 1000
+
+multiprocessing: true
+suppress_stan_output: true
