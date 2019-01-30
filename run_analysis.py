@@ -54,6 +54,8 @@ if __name__ == "__main__":
     # Mask for finite data points.
     finite = np.all([np.isfinite(data[ln]) for ln in all_label_names], axis=0)
     
+    USE_SV_MASK = config["sv_mask"]
+
     if USE_SV_MASK:
         # Mask for science verifiation
         with open("sv.mask", "rb") as fp:
