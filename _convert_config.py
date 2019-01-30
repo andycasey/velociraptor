@@ -14,6 +14,7 @@ if __name__ == "__main__":
     model_paths = sys.argv[2:]
 
     config = dict()
+    models = dict()
     for i, model_path in enumerate(model_paths):
 
         model_name = os.path.basename(model_path).split(".")[1]
@@ -36,8 +37,9 @@ if __name__ == "__main__":
 
         foo["predictor_label_name"] = model_config["predictor_label_names"][0]
 
-        config[model_name] = foo
+        models[model_name] = foo
 
+    config["models"] = models
 
 
     with open(output_path, "w") as fp:

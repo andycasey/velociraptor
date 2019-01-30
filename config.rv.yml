@@ -33,7 +33,7 @@ require_finite_label_names:
  - absolute_rp_mag
  - phot_rp_mean_mag
 
-number_of_sources: 1000
+number_of_sources: 10000
 
 multiprocessing: true
 suppress_stan_output: true

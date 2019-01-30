@@ -15,12 +15,15 @@ import yaml
 from time import (sleep, time)
 from astropy.io import fits
 from scipy import optimize as op
+from scipy.special import logsumexp
 
 import george
 
 import npm_utils as npm
 import stan_utils as stan
 
+
+USE_SV_MASK = True
 
 if __name__ == "__main__":
 
@@ -44,13 +47,19 @@ if __name__ == "__main__":
     all_label_names = []
     for model_name, model_config in config["models"].items():
         all_label_names.append(model_config["predictor_label_name"])
-        all_label_names.extend(model_config["kdt_label_names"])
+        all_label_names.extend(model_config["kdtree_label_names"])
 
     all_label_names = list(np.unique(all_label_names))     
 
     # Mask for finite data points.
     finite = np.all([np.isfinite(data[ln]) for ln in all_label_names], axis=0)
+    
+    if USE_SV_MASK:
+        # Mask for science verifiation
+        with open("sv.mask", "rb") as fp:
+            sv_mask = pickle.load(fp)
 
+        sv_mask = sv_mask[finite]
 
     # Load the model.
     model = stan.load_stan_model(config["model_path"], verbose=False)
@@ -69,6 +78,8 @@ if __name__ == "__main__":
     model_results = dict()
     for model_name, model_config in config["models"].items():
 
+        logging.info(f"Running model {model_name} with config:\n{model_config}")
+
         # Set up a KD-tree.
         X = np.vstack([data[ln][finite] for ln in model_config["kdtree_label_names"]]).T
         Y = np.array(data[model_config["predictor_label_name"]])[finite]
@@ -86,13 +97,12 @@ if __name__ == "__main__":
             maximum_points=model_config["kdtree_maximum_points"],
             minimum_density=model_config.get("kdtree_minimum_density", None))
 
-        logging.info("k-d tree keywords: {}".format(kdt_kwds))
-
+        
         # Optimize the non-parametric model for those sources.
         results = np.zeros((M, 5))
         done = np.zeros(M, dtype=bool)
 
-        def optimize_mixture_model(index, inits=None):
+        def optimize_mixture_model(index, inits=None, scalar=5):
 
             # Select indices and get data.
             d, nearby_idx, meta = npm.query_around_point(kdt, X[index], **kdt_kwds)
@@ -101,7 +111,7 @@ if __name__ == "__main__":
             ball = X[nearby_idx]
 
             if inits is None:
-                inits = npm.get_rv_initialisation_points(y)
+                inits = npm.get_rv_initialisation_points(y, scalar=scalar)
 
             # Update meta dictionary with things about the data.
             meta = dict(max_log_y=np.log(np.max(y)),
@@ -112,12 +122,13 @@ if __name__ == "__main__":
                         init_points=inits,
                         kdt_indices=nearby_idx)
 
-            data_dict = dict(y=y,
-                             N=y.shape[0],
-                             D=y.shape[1],
+            data_dict = dict(y=np.atleast_2d(y).T,
+                             N=y.size,
+                             scalar=scalar,
+                             D=1,
                              max_log_y=np.log(np.max(y)))
-            for k, v in model_config["parameter_bounds"].items():
-                data_dict["{}_bounds".format(k)] = v
+            #for k, v in model_config["parameter_bounds"].items():
+            #    data_dict["{}_bounds".format(k)] = v
 
             p_opts = []
             ln_probs = []
@@ -160,6 +171,34 @@ if __name__ == "__main__":
                 idx = np.argmax(ln_probs)
                 p_opt = p_opts[idx]
                 meta["init_idx"] = idx
+
+                """
+                if sum(done) > 550 and sum(done) < 570:
+
+                    theta, mu_single, sigma_single, mu_multiple, sigma_multiple = npm._pack_params(**p_opt)
+
+
+                    fig, ax = plt.subplots()
+                    xi = np.linspace(0, 20, 1000)
+
+                    y_s = npm.norm_pdf(xi, mu_single, sigma_single, theta)
+                    y_m = npm.lognorm_pdf(xi, mu_multiple, sigma_multiple, theta)
+
+                    ax.plot(xi, y_s, c="tab:blue")
+                    ax.plot(xi, y_m, c="tab:red")
+
+                    p_single = np.exp(np.log(y_s) - logsumexp([np.log(y_s), np.log(y_m)], axis=0))
+
+                    ax.plot(xi, p_single, c="k")
+
+                    ax.set_title(f"{index}: {theta:.1e} {mu_single:.2f} {sigma_single:.2f} {sigma_multiple:.2f}")
+
+                    ax.hist(y, bins=np.linspace(0, 20, 20), alpha=0.5, facecolor="#666666", normed=True)
+
+
+                if sum(done) > 570:
+                    raise a
+                """
 
                 return (index, p_opt, meta)
 
@@ -275,15 +314,46 @@ if __name__ == "__main__":
 
                             pbar.update(1)
 
+        # Do not use bad results.
+
+        # Bad results include:
+        # - Things that are so clearly discrepant in every parameter.
+        # - Things that are on the edge of the boundaries of parameter space.
+        sigma = np.abs(results - np.median(results, axis=0)) \
+              / np.std(results, axis=0)
+        sigma = np.sum(sigma, axis=1)
+
+        tol_sigma, tol_proximity = (10, 1e-2)
+
+        lower_bounds = np.array([0.5, 0.5, 0.05, -np.inf, 0.20])
+        upper_bounds = np.array([1.0, 15, 10, +np.inf, 1.6])
+
+        not_ok_bound = np.any(
+            (np.abs(results - lower_bounds) <= tol_proximity) \
+          + (np.abs(results - upper_bounds) <= tol_proximity), axis=1)
+
+        not_ok_sigma = sigma > tol_sigma
+
+        not_ok = not_ok_bound + not_ok_sigma
+
+        print(f"There were {sum(not_ok_sigma)} results discarded for being outliers")
+        print(f"There were {sum(not_ok_bound)} results discarded for being close to the edge")
+        print(f"There were {sum(not_ok)} results discarded in total")
+
+        indices = indices[~not_ok]
+        results = results[~not_ok]
 
         # Run the gaussian process on the single star estimates.
         gp_block_size = 10000
-        
-        gp_predict_indices = (1, 2, 4)
-        gp_parameters = np.zeros((len(gp_predict_indices), 4))
+        G = 5 # number of kernel hyperparameters
+        gp_predict_indices = (0, 1, 2, 3, 4)
+        gp_parameters = np.zeros((len(gp_predict_indices), G))
         gp_predictions = np.nan * np.ones((X.shape[0], 2 * len(gp_predict_indices)))
 
         x = X[indices]
+
+        #randn = np.random.choice(X.shape[0], 50000, replace=False)
+            
 
         for i, index in enumerate(gp_predict_indices):
 
@@ -292,8 +362,11 @@ if __name__ == "__main__":
             metric = np.var(x, axis=0)
             kernel = george.kernels.Matern32Kernel(metric, ndim=x.shape[1])
 
-            gp = george.GP(kernel, mean=np.mean(y), fit_mean=True, fit_white_noise=True)
+            gp = george.GP(kernel, 
+                           mean=np.mean(y), fit_mean=True,
+                           white_noise=np.log(np.std(y)), fit_white_noise=True)
 
+            assert len(gp.parameter_names) == G
 
             def nll(p):
                 gp.set_parameter_vector(p)
@@ -325,127 +398,56 @@ if __name__ == "__main__":
             # Predict the quantity and the variance.
             B = int(np.ceil(X.shape[0] / gp_block_size))
 
-            for b in tqdm.tqdm(range(B)):
-                s, e = (b * gp_block_size, (b + 1)*gp_block_size)
-                p, p_var = gp.predict(y, X[s:1+e], return_var=True)
+            logging.info(f"Predicting {model_name} {index}")
 
-                gp_predictions[s:1+e, 2*i] = p
-                gp_predictions[s:1+e, 2*i + 1] = p_var
+            if USE_SV_MASK:
+                p, p_var = gp.predict(y, X[sv_mask], return_var=True)
+                gp_predictions[sv_mask, 2*i] = p
+                gp_predictions[sv_mask, 2*i+1] = p_var
 
-        model_results[model_name] = [results, gp_parameters, gp_predictions]
+            else:
+                with tqdm.tqdm(total=X.shape[0]) as pb:
+                    for b in range(B):
+                        s, e = (b * gp_block_size, (b + 1)*gp_block_size)
+                        p, p_var = gp.predict(y, X[s:1+e], return_var=True)
+
+                        gp_predictions[s:1+e, 2*i] = p
+                        gp_predictions[s:1+e, 2*i + 1] = p_var
+
+                        pb.update(e - s)
+
+
+            """
+
+            p, p_var = gp.predict(y, X[randn], return_var=True)
+            gp_predictions[randn, 2*i] = p
+            gp_predictions[randn, 2*i + 1] = p_var
+            
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots()
+            scat = ax.scatter(X.T[0][randn], X.T[1][randn], 
+                c=gp_predictions[:, 2*i][randn], s=1)
+            cbar = plt.colorbar(scat)
+
+            ax.set_title(f"{index} mu")
+
+            fig, ax = plt.subplots()
+            scat = ax.scatter(X.T[0][randn], X.T[1][randn], 
+                c=np.sqrt(gp_predictions[:, 2*i + 1][randn]), s=1)
+            cbar = plt.colorbar(scat)
+
+            ax.set_title(f"{index} sigma")
+            """
+
+        model_results[model_name] = [indices, results, gp_parameters, gp_predictions]
 
     # Save the predictions, and the GP hyperparameters.
-    save_dict = dict(config=config, results=model_results)
+    save_dict = dict(config=config, models=model_results)
     
     with open(results_path, "wb") as fp:
         pickle.dump(save_dict, fp)
 
     logging.info(f"Saved output to {results_path}")
-    
 
-"""
-
-raise a
-
-# Do this for some validation set?
-
-pred, pred_var = gp.predict(y, x, return_var=True)
-
-kwds = dict(s=1)
-
-fig, axes = plt.subplots(2, 3, figsize=(12, 4))
-
-# Data.model
-axes[0, 0].scatter(x.T[0], x.T[1], c=y, **kwds)
-axes[1, 0].scatter(x.T[0], x.T[2], c=y, **kwds)
-
-# Model.
-axes[0, 1].scatter(x.T[0], x.T[1], c=pred, **kwds)
-axes[1, 1].scatter(x.T[0], x.T[2], c=pred, **kwds)
-
-# Residual
-residuals = pred - y
-vminmax = np.percentile(np.abs(residuals), 95)
-
-residual_kwds = kwds.copy()
-residual_kwds.update(vmin=-vminmax, vmax=+vminmax)
-scat = axes[0, 2].scatter(x.T[0], x.T[1], c=pred-y, **residual_kwds)
-axes[1, 2].scatter(x.T[0], x.T[1], c=pred-y, **residual_kwds)
-
-
-#cbar = plt.colorbar(scat)
-
-
-for ax_col, ylabel in zip(axes, ("absolute rp mag", "apparent rp mag")):
-    # Common limits for each column.
-    ylims = np.array([ax.get_ylim() for ax in ax_col])
-    ylims = (np.max(ylims), np.min(ylims))
-
-    for ax in ax_col:
-        #ax.set_ylabel(r"$\textrm{{{0}}}$".format(ylabel))
-        ax.set_ylabel(ylabel)
-        ax.set_ylim(ylims)
-        #ax.set_xlabel(r"$\textrm{{bp - rp}}$")
-        ax.set_xlabel("bp - rp")
-        ax.set_ylim(ylims)
-
-
-for ax, title in zip(axes[0], ("data", "model", "residual")):
-    #x.set_title(r"$\textrm{{{0}}}$".format(title))
-    ax.set_title(title)
-
-
-
-def lnprob(p):
-    gp.set_parameter_vector(p)
-    return gp.log_likelihood(y, quiet=True) + gp.log_prior()
-
-
-initial = gp.get_parameter_vector()
-ndim, nwalkers = len(initial), 32
-p0 = initial + 1e-8 * np.random.randn(nwalkers, ndim)
-threads = 1 if config.get("multiprocessing", False) else mp.cpu_count()
-sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, threads=threads)
-
-
-burn = 500
-
-print("Running burn-in...")
-for result in tqdm.tqdm(sampler.sample(p0, iterations=burn), total=burn):
-    continue
-
-sampler.reset()
-
-prod = 1000
-print("Running production...")
-for result in tqdm.tqdm(sampler.sample(p0, iterations=prod), total=prod):
-    continue
-
-fig, axes = plt.subplots(ndim, 1)
-
-for j, ax in enumerate(axes):
-
-    for k in range(nwalkers):
-        ax.plot(sampler.chain[k, :, j], c="k", alpha=0.1)
-
-
-# Plot 50 draws for one star.
-N_draws = 50
-results = np.zeros((M, N_draws))
-for i in range(N_draws):
-
-    w = np.random.randint(sampler.chain.shape[0])
-    n = np.random.randint(sampler.chain.shape[1])
-
-    gp.set_parameter_vector(sampler.chain[w, n])
-
-    results[:, i] = gp.sample_conditional(y, x)
-
-
-
-time = time()
-print("Running production...")
-sampler.run_mcmc(p0, 1000);
-t_prod = time() - time
-print(f"Production took {t_prod:.0f} seconds")
-"""
+    raise a

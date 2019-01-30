@@ -327,7 +327,7 @@ def ln_likelihood(y, theta, s_mu, s_sigma, b_mu, b_sigma):
     b_lpdf = -np.log(y*b_sigma) - hl2p \
            - 0.5 * (np.log(y) - b_mu)**2 * b_ivar
 
-    foo = np.hstack([s_lpdf, b_lpdf]) + np.log([theta, 1-theta])
+    foo = np.vstack([s_lpdf, b_lpdf]).T + np.log([theta, 1-theta])
     ll = np.sum(logsumexp(foo, axis=1))
 
     #ll = np.sum(s_lpdf) + np.sum(b_lpdf)
@@ -411,17 +411,18 @@ def nlp(params, y, L):
     return -ln_prob(y, L, *params)
 
 
-def get_rv_initialisation_points(y):
+def get_rv_initialisation_points(y, scalar=5):
 
-    N, D = y.shape
+    N= y.size
+    D = 1
 
     init = dict(
-        theta=0.1,
+        theta=0.75,
         mu_single=np.min([np.median(y, axis=0), 10]),
         sigma_single=0.2,
         sigma_multiple=0.5)
 
-    lower_mu_multiple = np.log(init["mu_single"] + init["sigma_single"]) \
+    lower_mu_multiple = np.log(init["mu_single"] + scalar * init["sigma_single"]) \
                       + init["sigma_multiple"]**2
 
     init["mu_multiple"] = 1.1 * lower_mu_multiple
