@@ -411,10 +411,9 @@ def nlp(params, y, L):
     return -ln_prob(y, L, *params)
 
 
-def get_rv_initialisation_points(y, scalar=5):
+def _get_1d_initialisation_point(y, scalar=5, bounds=None):
 
     N= y.size
-    D = 1
 
     init = dict(
         theta=0.75,
@@ -422,13 +421,18 @@ def get_rv_initialisation_points(y, scalar=5):
         sigma_single=0.2,
         sigma_multiple=0.5)
 
+    if bounds is not None:
+        for k, (lower, upper) in bounds.items():
+            if not (upper >= init[k] >= lower):
+                init[k] = np.mean([upper, lower])
+
     lower_mu_multiple = np.log(init["mu_single"] + scalar * init["sigma_single"]) \
                       + init["sigma_multiple"]**2
 
     init["mu_multiple"] = 1.1 * lower_mu_multiple
 
 
-    op_kwds = dict(x0=_pack_params(**init), args=(y, D))
+    op_kwds = dict(x0=_pack_params(**init), args=(y, 1))
 
     nlp = lambda params, y, L: -ln_prob(y, L, *params)
     p_opt = op.minimize(nlp, **op_kwds)
@@ -441,7 +445,7 @@ def get_rv_initialisation_points(y, scalar=5):
     # Only return valid init values.
     valid_inits = []
     for init in (init_dict, op_dict):
-        if np.isfinite(nlp(_pack_params(**init), y, D)):
+        if np.isfinite(nlp(_pack_params(**init), y, 1)):
             valid_inits.append(init)
 
     valid_inits.append("random")

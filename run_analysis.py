@@ -74,6 +74,11 @@ if __name__ == "__main__":
 
     logging.info("Optimization keywords: {}".format(default_opt_kwds))
 
+    default_bounds = dict(bound_theta=[0.5, 1],
+                          bound_mu_single=[0.5, 15],
+                          bound_sigma_single=[0.05, 10],
+                          bound_sigma_multiple=[0.2, 1.6])
+
     M = config["number_of_sources"]
     indices = np.random.choice(sum(finite), M, replace=False)
 
@@ -81,6 +86,10 @@ if __name__ == "__main__":
     for model_name, model_config in config["models"].items():
 
         logging.info(f"Running model {model_name} with config:\n{model_config}")
+
+        bounds = default_bounds.copy()
+        for k, (lower, upper) in model_config["bounds"].items():
+            bounds[f"bound_{k}"] = [lower, upper]
 
         # Set up a KD-tree.
         X = np.vstack([data[ln][finite] for ln in model_config["kdtree_label_names"]]).T
@@ -113,7 +122,8 @@ if __name__ == "__main__":
             ball = X[nearby_idx]
 
             if inits is None:
-                inits = npm.get_rv_initialisation_points(y, scalar=scalar)
+                inits = npm._get_1d_initialisation_point(
+                    y, scalar=scalar, bounds=model_config["bounds"])
 
             # Update meta dictionary with things about the data.
             meta = dict(max_log_y=np.log(np.max(y)),
@@ -124,11 +134,11 @@ if __name__ == "__main__":
                         init_points=inits,
                         kdt_indices=nearby_idx)
 
-            data_dict = dict(y=np.atleast_2d(y).T,
+            data_dict = dict(y=y,
                              N=y.size,
-                             scalar=scalar,
-                             D=1,
-                             max_log_y=np.log(np.max(y)))
+                             scalar=scalar)
+            data_dict.update(bounds)
+
             #for k, v in model_config["parameter_bounds"].items():
             #    data_dict["{}_bounds".format(k)] = v
 
@@ -155,6 +165,13 @@ if __name__ == "__main__":
                         if p_opt is not None:
                             p_opts.append(p_opt)
                             ln_probs.append(npm.ln_prob(y, 1, *npm._pack_params(**p_opt)))
+
+                try:
+                    p_opt
+
+                except UnboundLocalError:
+                    logging.warning("Stan failed. STDOUT & STDERR:")
+                    logging.warning("\n".join(sm.outputs))
 
                 if p_opt is None:
                     stdout, stderr = sm.outputs
@@ -325,11 +342,17 @@ if __name__ == "__main__":
               / np.std(results, axis=0)
         sigma = np.sum(sigma, axis=1)
 
-        tol_sigma, tol_proximity = (10, 1e-2)
+        tol_sigma = model_config["tol_sum_sigma"]
+        tol_proximity = model_config["tol_proximity"]
 
-        lower_bounds = np.array([0.5, 0.5, 0.05, -np.inf, 0.20])
-        upper_bounds = np.array([1.0, 15, 10, +np.inf, 1.6])
+        parameter_names = (
+            "theta", 
+            "mu_single", "sigma_single", 
+            "mu_multiple", "sigma_multiple")
 
+        lower_bounds = np.array([model_config["bounds"].get(k, [-np.inf])[0] for k in parameter_names])
+        upper_bounds = np.array([model_config["bounds"].get(k, [+np.inf])[-1] for k in parameter_names])
+        
         not_ok_bound = np.any(
             (np.abs(results - lower_bounds) <= tol_proximity) \
           + (np.abs(results - upper_bounds) <= tol_proximity), axis=1)
@@ -342,7 +365,7 @@ if __name__ == "__main__":
         print(f"There were {sum(not_ok_bound)} results discarded for being close to the edge")
         print(f"There were {sum(not_ok)} results discarded in total")
 
-        indices = indices[~not_ok]
+        model_indices = indices[~not_ok]
         results = results[~not_ok]
 
         # Run the gaussian process on the single star estimates.
@@ -352,7 +375,7 @@ if __name__ == "__main__":
         gp_parameters = np.zeros((len(gp_predict_indices), G))
         gp_predictions = np.nan * np.ones((X.shape[0], 2 * len(gp_predict_indices)))
 
-        x = X[indices]
+        x = X[model_indices]
 
         #randn = np.random.choice(X.shape[0], 50000, replace=False)
             
@@ -442,7 +465,7 @@ if __name__ == "__main__":
             ax.set_title(f"{index} sigma")
             """
 
-        model_results[model_name] = [indices, results, gp_parameters, gp_predictions]
+        model_results[model_name] = [model_indices, results, gp_parameters, gp_predictions]
 
     # Save the predictions, and the GP hyperparameters.
     save_dict = dict(config=config, models=model_results)
