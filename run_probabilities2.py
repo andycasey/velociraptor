@@ -111,6 +111,10 @@ if __name__ == "__main__":
 
             p_single[m, n] = np.exp(lnprobs[m, n, :, 0] - logsumexp(lnprobs[m, n], axis=1))
 
+            # TODO HACK
+            is_def_single = y[n] < draws[1]
+            p_single[m, n][is_def_single] = 1.0
+
             """
             
             xi = np.linspace(0, 20, 1000)
@@ -142,8 +146,8 @@ if __name__ == "__main__":
                 
             for k in range(K):
                 # TODO: this could be wrong,..
-                numerator = logsumexp(lnprobs[:, n, k, 0])
-                denominator = logsumexp(lnprobs[:, n, k, 1])
+                numerator = sum(lnprobs[:, n, k, 0])
+                denominator = sum(lnprobs[:, n, k, 1])
 
                 p_single[-1, n, k] = np.exp(numerator - logsumexp([numerator, denominator]))
 
@@ -170,7 +174,7 @@ if __name__ == "__main__":
     print("Classifying")
     confidence = np.sum(p_single > 0.5, axis=2)/K
     is_single = confidence > 0.5
-    confidence[~is_single] = 1 - confidence[~is_single]
+    #confidence[~is_single] = 1 - confidence[~is_single]
 
     print("Aggregating data")
 
@@ -200,18 +204,34 @@ if __name__ == "__main__":
         properties[f"{model_name}_gp_sigma_s"] = sigma_single
         properties[f"{model_name}_gp_mu_m"] = mu_multiple
         properties[f"{model_name}_gp_sigma_m"] = sigma_multiple
-
-        #properties[f"{model_name}_gp_theta_var"] = theta_var
-        #properties[f"{model_name}_gp_mu_s_var"] = mu_single_var
-        #properties[f"{model_name}_gp_sigma_s_var"] = sigma_single_var
-        #properties[f"{model_name}_gp_mu_m_var"] = mu_multiple_var
-        #properties[f"{model_name}_gp_sigma_m_var"] = sigma_multiple_var
-
+        """
+        properties[f"{model_name}_gp_theta_var"] = theta_var
+        properties[f"{model_name}_gp_mu_s_var"] = mu_single_var
+        properties[f"{model_name}_gp_sigma_s_var"] = sigma_single_var
+        properties[f"{model_name}_gp_mu_m_var"] = mu_multiple_var
+        properties[f"{model_name}_gp_sigma_m_var"] = sigma_multiple_var
+        """
         properties[f"{model_name}_is_single"] = is_single[m].astype(int)
         properties[f"{model_name}_confidence"] = confidence[m]
 
         for p, percentile in enumerate(percentiles):
             properties[f"{model_name}_p{percentile:.0f}"] = p_single_percentiles[p, m]
+
+    # Estimate RV semi-amplitude.
+    if "rv" in model_names.keys():
+
+        print("Calculating radial velocity excess")
+
+        properties[f"rv_excess"] = properties["rv_single_epoch_scatter"] \
+                                 - properties["rv_gp_mu_s"]
+
+        rv_gp_mu_s_var = results["models"]["rv"][-1].T[3]
+        rv_gp_sigma_s_var = results["models"]["rv"][-1].T[5]
+        properties[f"rv_excess_var"] = properties["rv_gp_sigma_s"]**2 \
+                                     + rv_gp_mu_s_var \
+                                     + rv_gp_sigma_s_var
+
+
 
     # Joint probabilities.
     if M > 1:
@@ -221,8 +241,31 @@ if __name__ == "__main__":
         for p, percentile in enumerate(percentiles):
             properties[f"joint_p{percentile:.0f}"] = p_single_percentiles[p, -1]
 
+    print("Save PDF draws")
+
+    # Only save finite predictions for now.
+    mask = np.all(np.isfinite(results["models"]["rv"][-1]), axis=1)
+
+    pdf_output_path = ".".join(output_path.split(".")[:-1]) + f".pdf.memmap"
+    pdf_sources_output_path = ".".join(output_path.split(".")[:-1]) + f".sources.memmap"
+
+    pdf_output = np.memmap(pdf_output_path, 
+                           dtype=np.float32, 
+                           shape=(MJ, sum(mask), K),
+                           mode="w+")
+
+    pdf_output[:] = p_single[:, mask, :]
+    del pdf_output
+    
+    pdf_sources_output = np.memmap(pdf_sources_output_path,
+                                   shape=(sum(mask), ),
+                                   dtype='>i8',
+                                   mode="w+")
+    pdf_sources_output[:] = data["source_id"][finite][mask]
+    del pdf_sources_output
+
+
     print("Writing output file..")
     Table(data=properties).write(output_path, overwrite=True)
-
-    del properties
     print(f"Output written to {output_path}")
+
