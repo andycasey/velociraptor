@@ -467,6 +467,12 @@ if __name__ == "__main__":
 
         model_results[model_name] = [model_indices, results, gp_parameters, gp_predictions]
 
+        # Save predictions so far.
+        logging.info(f"Saved progress to {results_path}")
+        with open(results_path, "wb") as fp:
+            pickle.dump(dict(config=config, models=model_results), fp)
+
+
     # Save the predictions, and the GP hyperparameters.
     save_dict = dict(config=config, models=model_results)
     
