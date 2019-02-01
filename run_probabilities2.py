@@ -4,7 +4,6 @@ Run this after run_analysis.py
 """
 
 import logging
-import multiprocessing as mp
 import numpy as np
 import sys
 import pickle
@@ -36,7 +35,6 @@ def lnprob(y, theta, s_mu, s_sigma, b_mu, b_sigma):
 
 
 
-
 if __name__ == "__main__":
 
     result_path = sys.argv[1]
@@ -63,9 +61,8 @@ if __name__ == "__main__":
     M = len(model_names)
     MJ = M + 1 if M > 1 else 1
     N = sum(finite)
-    lnprobs = np.memmap("lnprobs.memmap", mode="w+", dtype=np.float32, shape=(M, N, K, 2))
-    p_single = np.memmap("p_single.memmap", mode="w+", dtype=np.float32, shape=(MJ, N, K))
- 
+    lnprobs = np.zeros((M, N, K, 2))
+    p_single = np.zeros((MJ, N, K))
 
     for m, model_name in enumerate(model_names):
 
@@ -76,13 +73,25 @@ if __name__ == "__main__":
         model_indices, model_results, gp_parameters, gp_predictions \
             = results["models"][model_name]
 
+        theta, theta_var, \
+            mu_single, mu_single_var, \
+            sigma_single, sigma_single_var, \
+            mu_multiple, mu_multiple_var, \
+            sigma_multiple, sigma_multiple_var = gp_predictions.T
+
         # Calculate probabilities.
         rhos = np.corrcoef(model_results.T)
 
-        def calc_lnprob(index):
+        print(f"Calculating probabilities for {model_name}")
 
-            mu = predictions[::2]
-            diag = np.atleast_2d(predictions[1::2])**0.5
+        for n in tqdm.tqdm(range(N)):
+        
+            #TODO SKIPPING
+            if not np.all(np.isfinite(gp_predictions[n])): continue
+
+            
+            mu = gp_predictions[n, ::2]
+            diag = np.atleast_2d(gp_predictions[n, 1::2])**0.5
 
             cov = diag * rhos * diag.T
 
@@ -97,76 +106,14 @@ if __name__ == "__main__":
             draws_3_min = np.log(draws[1] + 5 * draws[2]) + draws[4]**2
             draws[3] = np.max([draws[3], draws_3_min], axis=0)
 
-            lnprobs = np.zeros((K, 2))
-            lnprobs[:, 0] = np.log(draws[0]) + npm.normal_lpdf(y, draws[1], draws[2])
-            lnprobs[:, 1] = np.log(1 - draws[0]) + npm.lognormal_lpdf(y, draws[3], draws[4])
+            lnprobs[m, n, :, 0] = np.log(draws[0]) + npm.normal_lpdf(y[n], draws[1], draws[2])
+            lnprobs[m, n, :, 1] = np.log(1 - draws[0]) + npm.lognormal_lpdf(y[n], draws[3], draws[4])
 
-            p_single = np.exp(lnprobs[:, 0] - logsumexp(lnprobs, axis=1))
+            p_single[m, n] = np.exp(lnprobs[m, n, :, 0] - logsumexp(lnprobs[m, n], axis=1))
 
             # TODO HACK
-            is_def_single = y < draws[1]
-            p_single[is_def_single] = 1.0
-
-            return (index, lnprobs, p_single)
-
-
-        def lnprob_swarm(q_in, q_out, rhos, K):
-
-            while True:
-
-                try:
-                    index, y, predictions = q_in.get_nowait()
-
-                except mp.queues.Empty:
-                    break
-
-                except StopIteration:
-                    break
-
-                else:
-
-                    result = calc_lnprob(index)
-
-                    out_queue.put(result)
-
-            return None
-
-        print(f"Calculating probabilities for {model_name}")
-
-        P = mp.cpu_count()
-        with mp.Pool(processes=P) as pool:
-
-            manager = mp.Manager()
-            q_in, q_out = (manager.Queue(), manager.Queue())
-
-            kwds = dict(q_in=q_in, q_out=q_out, rhos=rhos, K=K)
-
-            for i in tqdm.tqdm(range(N), desc="Dumping to queue"):
-                q_in.put((i, ))
-
-            j = []
-            for _ in tqdm.tqdm(range(P), desc="Spawning threads"):                
-                j.append(pool.apply_async(lnprob_swarm, [], kwds=kwds))
-
-
-            with tqdm.tqdm(total=N, desc=f"Calculating probabilities for {model_name}") as pbar:
-
-                try:
-                    r = q_out.get(timeout=3)
-
-                except mp.queues.Empty:
-                    logging.info("Done")
-                    break
-
-                else:
-                    (index, lnprobs_, p_single_) = r
-
-                    lnprob[m, index] = lnprobs_
-                    p_single[m, index] = p_single_
-
-                    pbar.update(1)
-        
-                
+            is_def_single = y[n] < draws[1]
+            p_single[m, n][is_def_single] = 1.0
 
             """
             
@@ -321,8 +268,3 @@ if __name__ == "__main__":
     print("Writing output file..")
     Table(data=properties).write(output_path, overwrite=True)
     print(f"Output written to {output_path}")
-
-    del ln_probs
-    del p_single
-
-
