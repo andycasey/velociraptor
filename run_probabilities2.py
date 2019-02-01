@@ -34,6 +34,59 @@ def lnprob(y, theta, s_mu, s_sigma, b_mu, b_sigma):
     return np.vstack([s_lpdf, b_lpdf]).T + np.log([theta, 1-theta])
 
 
+def calc_lnprob(index, y, predictions, rhos, K):
+
+    mu = predictions[::2]
+    diag = np.atleast_2d(predictions[1::2])**0.5
+
+    cov = diag * rhos * diag.T
+
+    draws = np.random.multivariate_normal(mu, cov, size=K).T
+
+    # Clip things to bounded values.
+    draws[0] = np.clip(draws[0], 0.5, 1.0)
+    draws[1] = np.clip(draws[1], 0.5, 15)
+    draws[2] = np.clip(draws[2], 0.05, 10)
+    draws[4] = np.clip(draws[4], 0.2, 1.6)
+
+    draws_3_min = np.log(draws[1] + 5 * draws[2]) + draws[4]**2
+    draws[3] = np.max([draws[3], draws_3_min], axis=0)
+
+    lnprobs = np.zeros((K, 2))
+    lnprobs[:, 0] = np.log(draws[0]) + npm.normal_lpdf(y, draws[1], draws[2])
+    lnprobs[:, 1] = np.log(1 - draws[0]) + npm.lognormal_lpdf(y, draws[3], draws[4])
+
+    p_single = np.exp(lnprobs[:, 0] - logsumexp(lnprobs, axis=1))
+
+    # TODO HACK
+    is_def_single = y < draws[1]
+    p_single[is_def_single] = 1.0
+
+    return (index, lnprobs, p_single)
+
+
+def lnprob_swarm(q_in, q_out, rhos, K):
+
+    while True:
+
+        try:
+            index, y, predictions = q_in.get_nowait()
+
+        except mp.queues.Empty:
+            break
+
+        except StopIteration:
+            break
+
+        else:
+
+            result = calc_lnprob(index, y, predictions, rhos, K)
+
+            out_queue.put(result)
+
+    return None
+    
+
 
 if __name__ == "__main__":
 
@@ -84,36 +137,40 @@ if __name__ == "__main__":
 
         print(f"Calculating probabilities for {model_name}")
 
-        for n in tqdm.tqdm(range(N)):
+        P = mp.cpu_count()
+        with mp.Pool(processes=P) as pool:
+
+            manager = mp.Manager()
+            q_in, q_out = (manager.Queue(), manager.Queue())
+
+            kwds = dict(q_in=q_in, q_out=q_out, rhos=rhos, K=K)
+
+            for i in range(N):
+                in_queue.put((i, y[n], gp_predictions[:, n]))
+
+            j = []
+            for _ in range(P):
+                j.append(pool.apply_async(lnprob_swarm, [], kwds=kwds))
+
+
+            with tqdm.tqdm(total=N) as pbar:
+
+                try:
+                    r = q_out.get(timeout=3)
+
+                except mp.queues.Empty:
+                    logging.info("Done")
+                    break
+
+                else:
+                    (index, lnprobs_, p_single_) = r
+
+                    lnprob[m, index] = lnprobs_
+                    p_single[m, index] = p_single_
+
+                    pbar.update(1)
         
-            #TODO SKIPPING
-            if not np.all(np.isfinite(gp_predictions[n])): continue
-
-            
-            mu = gp_predictions[n, ::2]
-            diag = np.atleast_2d(gp_predictions[n, 1::2])**0.5
-
-            cov = diag * rhos * diag.T
-
-            draws = np.random.multivariate_normal(mu, cov, size=K).T
-
-            # Clip things to bounded values.
-            draws[0] = np.clip(draws[0], 0.5, 1.0)
-            draws[1] = np.clip(draws[1], 0.5, 15)
-            draws[2] = np.clip(draws[2], 0.05, 10)
-            draws[4] = np.clip(draws[4], 0.2, 1.6)
-
-            draws_3_min = np.log(draws[1] + 5 * draws[2]) + draws[4]**2
-            draws[3] = np.max([draws[3], draws_3_min], axis=0)
-
-            lnprobs[m, n, :, 0] = np.log(draws[0]) + npm.normal_lpdf(y[n], draws[1], draws[2])
-            lnprobs[m, n, :, 1] = np.log(1 - draws[0]) + npm.lognormal_lpdf(y[n], draws[3], draws[4])
-
-            p_single[m, n] = np.exp(lnprobs[m, n, :, 0] - logsumexp(lnprobs[m, n], axis=1))
-
-            # TODO HACK
-            is_def_single = y[n] < draws[1]
-            p_single[m, n][is_def_single] = 1.0
+                
 
             """
             
