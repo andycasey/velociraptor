@@ -16,45 +16,56 @@ plt.style.use(mpl_style)
 
 
 BASE_PATH = "../../"
-RELEASE_CANDIDATE_VERSION = 5
+RELEASE_CANDIDATE_VERSION = 100
 
 MAKE_FIGURES = [
-    "rv_hrd_single_star_fraction_hist",
-    "rv_hrd_single_star_fraction_scatter",
+    #"joint_p50_mainsequence_median",
+    #"joint_p50_mainsequence_mean",
+    #"joint_p50_wrt_kdt_labels",
+    #"rv_mean_joint_p50_wrt_kdt_labels",
+    #"ast_mean_joint_p50_wrt_kdt_labels",
+    #"mean_joint_p50_wrt_kdt_labels",
+    #"all_joint_p50_wrt_kdt_labels",
+    #"hrd_single_star_fraction_hist",
+    #"ast_hrd_single_star_fraction_hist",
+    #"rv_hrd_single_star_fraction_hist",
+    #"rv_hrd_single_star_fraction_scatter",
+    #"rv_sb9_kalpha_comparison",
+    "rv_sb9_kalpha_comparison_tau",
+    "rv_sb9_k_comparison",
+    "rv_sb9_kalpha_comparison_period",
+    "rv_sb9_kp_corner",
     "rv_apw_unimodal_k_comparison",
     "rv_apw_unimodal_kalpha_comparison",
     "rv_apw_percentiles_k_comparison",
     "rv_gp_hrd",
     "rv_gp_wrt_params",
+    "ast_gp_hrd",
+    "ast_gp_wrt_params",
     "rv_soubiran_hist",
     "rv_huang_hist",
-    "rv_mean_tau_single_wrt_kdt_labels",
-    "ast_mean_tau_single_wrt_kdt_labels",
-    "mean_tau_single_wrt_kdt_labels",
-    "all_tau_single_wrt_kdt_labels",
-    "rv_sb9_k_comparison",
-    "hrd_single_star_fraction_hist",
-    "tau_single_wrt_kdt_labels",
-    "rv_huang_hist2",
-
+    "rv_huang_hist2"
 ]
 
 #MAKE_FIGURES = [
-#    "ast_gp_hrd"
+#    "ast_gp_hrd",
 #]
-MAKE_FIGURES = [
-    "tau_single_mainsequence_mean"
-]
 
 
 DEFAULT_SEQUENTIAL_CMAP = "viridis"
 
-
+"""
 velociraptor = fits.open(os.path.join(
     BASE_PATH,
     "results", 
     "velociraptor-catalog.rc.{:.0f}.fits".format(RELEASE_CANDIDATE_VERSION)))
 velociraptor = velociraptor[1].data
+"""
+try:
+    velociraptor
+except NameError:
+    velociraptor = fits.open("../../results/die-hard-subset.fits")[1].data
+
 
 latex_labels = dict(
     bp_rp=r"\textrm{bp - rp}",
@@ -63,12 +74,14 @@ latex_labels = dict(
     absolute_g_mag=r"\textrm{absolute g mag}",
     rv_mu_single=r"$\mu_s$ \textrm{/ km\,s}$^{-1}$",
     rv_sigma_single=r"$\sigma_s$ \textrm{/ km\,s}$^{-1}$",
-    rv_tau_single=r"$\tau_\textrm{rv,single}$",
-    ast_tau_single=r"$\tau_\textrm{ast,single}$",
+    rv_p50=r"$\tau_\textrm{rv,single}$",
+    ast_p50=r"$\tau_\textrm{ast,single}$",
     rv_single_epoch_scatter=r"\textrm{radial velocity jitter / km\,s}$^{-1}$",
     astrometric_unit_weight_error=r"\textrm{astrometric jitter}",
-    ast_mu_single=r"$\mu_\textrm{s,ast}$",
-    ast_sigma_single=r"$\sigma_\textrm{s,ast}$"
+    ast_gp_mu_s=r"$\mu_\textrm{s,ast}$",
+    ast_gp_sigma_s=r"$\sigma_\textrm{s,ast}$",
+    rv_gp_mu_s=r"$\mu_{rv,s}\,\textrm{km\,s}^{-1}$",
+    rv_gp_sigma_s=r"$\sigma_{rv,s}\,\textrm{km\,s}^{-1}$",
 
 )
 
@@ -82,7 +95,7 @@ common_kwds = dict([
 one_to_one_line_kwds = dict(c="#666666", linestyle=":", lw=1, zorder=-1)
 
 def savefig(fig, basename):
-    prefix = f"{basename}-v{RELEASE_CANDIDATE_VERSION}"
+    prefix =f"v{RELEASE_CANDIDATE_VERSION}-{basename}"
     fig.savefig(f"{prefix}.png")
     #fig.savefig(f"{prefix}.png", dpi=150)
     print(f"Saved figure {prefix}.png")
@@ -107,26 +120,24 @@ def cross_match(A_source_ids, B_source_ids):
 
 
 
-def estimate_K(rv_single_epoch_scatter, rv_mu_single, rv_sigma_single, 
-               rv_mu_single_var, rv_sigma_single_var, **kwargs):
+def estimate_K(data, **kwargs):
 
     # TODO: Consult with colleagues to see if there is anything more principaled
     #       we could do without requiring much more work.
+    K_est = data["rv_single_epoch_scatter"] - data["rv_gp_mu_s"]
+    K_err = data["rv_gp_sigma_s"]**2 #\
+    #      + data["rv_gp_mu_s_var"] \
+    #      + data["rv_gp_sigma_s_var"]
 
-    K = rv_single_epoch_scatter - rv_mu_single
-    K_err = np.sqrt(rv_mu_single_var + rv_sigma_single**2 + rv_sigma_single_var)
+    #K_est = data["rv_excess"]
+    #K_err = data["rv_excess_var"]**0.5
 
-    return (K, K_err)
-
-
+    return (K_est, K_err)
 # some metric that is useful for showing "likelihood of binarity" until I decide
 # what is best.
-log_K_significance = np.log10(
-    (velociraptor["rv_single_epoch_scatter"] - velociraptor["rv_mu_single"]) \
-  /  velociraptor["rv_sigma_single"])
 
 
-figure_name = "tau_single_mainsequence_median"
+figure_name = "joint_p50_mainsequence_median"
 if figure_name in MAKE_FIGURES:
 
     ordered, reverse = (True, False)
@@ -134,7 +145,7 @@ if figure_name in MAKE_FIGURES:
 
     xlabel = "bp_rp"
     ylabels = ("absolute_g_mag", "absolute_g_mag", "absolute_g_mag")
-    zlabels = ("rv_tau_single", "ast_tau_single", "tau_single")
+    zlabels = ("rv_p50", "ast_p50", "joint_p50")
     titles = (
         r"\textrm{radial velocity}",
         r"\textrm{astrometry}",
@@ -201,7 +212,8 @@ if figure_name in MAKE_FIGURES:
 
 
     # Unbelievable that we have to do all this,...
-    fig.canvas.update()
+    #fig.canvas.update()
+    fig.canvas.draw()
 
     cbar.ax.yaxis.set_tick_params(width=0)
 
@@ -216,7 +228,7 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "tau_single_mainsequence_mean"
+figure_name = "joint_p50_mainsequence_mean"
 if figure_name in MAKE_FIGURES:
 
     ordered, reverse = (True, False)
@@ -224,7 +236,7 @@ if figure_name in MAKE_FIGURES:
 
     xlabel = "bp_rp"
     ylabels = ("absolute_g_mag", "absolute_g_mag", "absolute_g_mag")
-    zlabels = ("rv_tau_single", "ast_tau_single", "tau_single")
+    zlabels = ("rv_p50", "ast_p50", "joint_p50")
     titles = (
         r"\textrm{radial velocity}",
         r"\textrm{astrometry}",
@@ -291,7 +303,8 @@ if figure_name in MAKE_FIGURES:
 
 
     # Unbelievable that we have to do all this,...
-    fig.canvas.update()
+    #fig.canvas.update()
+    fig.canvas.draw()
 
     cbar.ax.yaxis.set_tick_params(width=0)
 
@@ -305,7 +318,7 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "tau_single_wrt_kdt_labels"
+figure_name = "joint_p50_wrt_kdt_labels"
 if figure_name in MAKE_FIGURES:
 
     ordered = True
@@ -314,7 +327,7 @@ if figure_name in MAKE_FIGURES:
 
     label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
     ylabels = ("rv_single_epoch_scatter", "astrometric_unit_weight_error")
-    zlabels = ("rv_tau_single", "ast_tau_single")
+    zlabels = ("rv_p50", "ast_p50")
 
     fig, axes = plt.subplots(2, 3, figsize=(12, 9))
 
@@ -375,16 +388,16 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "rv_mean_tau_single_wrt_kdt_labels"
+figure_name = "rv_mean_joint_p50_wrt_kdt_labels"
 if figure_name in MAKE_FIGURES:
 
 
     label_names = ("bp_rp", "phot_rp_mean_mag", "absolute_rp_mag")
     ylabel = r"$\langle\tau_\textrm{rv,single}\rangle$"
 
-    mask = np.isfinite(velociraptor["rv_tau_single"])
+    mask = np.isfinite(velociraptor["rv_p50"])
 
-    rv_tau_single = velociraptor["rv_tau_single"]
+    rv_p50 = velociraptor["rv_p50"]
 
     fig, axes = plt.subplots(1, len(label_names), figsize=(12, 4))
 
@@ -393,14 +406,14 @@ if figure_name in MAKE_FIGURES:
     for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 
         mean, edge, bin_index = binned_statistic(velociraptor[label_name][mask],
-                                                 rv_tau_single[mask],
+                                                 rv_p50[mask],
                                                  statistic="mean", bins=bins)
         var, _, __ = binned_statistic(velociraptor[label_name][mask],
-                                      rv_tau_single[mask],
+                                      rv_p50[mask],
                                       statistic=np.var, bins=bins)
 
         count, _, __ = binned_statistic(velociraptor[label_name][mask],
-                                      rv_tau_single[mask],
+                                      rv_p50[mask],
                                       statistic="count", bins=bins)
 
 
@@ -423,7 +436,7 @@ if figure_name in MAKE_FIGURES:
     savefig(fig, figure_name)
 
 
-figure_name = "ast_mean_tau_single_wrt_kdt_labels"
+figure_name = "ast_mean_joint_p50_wrt_kdt_labels"
 if figure_name in MAKE_FIGURES:
 
 
@@ -437,7 +450,7 @@ if figure_name in MAKE_FIGURES:
     for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 
         x = velociraptor[label_name]
-        y = velociraptor["ast_tau_single"]
+        y = velociraptor["ast_p50"]
 
         mask = np.isfinite(x * y)
 
@@ -470,7 +483,7 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "mean_tau_single_wrt_kdt_labels"
+figure_name = "mean_joint_p50_wrt_kdt_labels"
 if figure_name in MAKE_FIGURES:
 
 
@@ -484,7 +497,7 @@ if figure_name in MAKE_FIGURES:
     for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 
         x = velociraptor[label_name]
-        y = velociraptor["tau_single"]
+        y = velociraptor["joint_p50"]
 
         mask = np.isfinite(x * y)
 
@@ -519,7 +532,7 @@ if figure_name in MAKE_FIGURES:
 
 
 
-figure_name = "all_tau_single_wrt_kdt_labels"
+figure_name = "all_joint_p50_wrt_kdt_labels"
 if figure_name in MAKE_FIGURES:
 
 
@@ -532,7 +545,7 @@ if figure_name in MAKE_FIGURES:
 
     for prefix in (None, "rv", "ast"):
 
-        label = "tau_single" if prefix is None else f"{prefix}_tau_single"
+        label = "joint_p50" if prefix is None else f"{prefix}_p50"
 
         for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 
@@ -579,7 +592,7 @@ if figure_name in MAKE_FIGURES:
 
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
-    zlabel = "tau_single"
+    zlabel = "joint_p50"
 
     # Restrict sensibly.
     mask = (velociraptor["absolute_rp_mag"] > -16) \
@@ -621,7 +634,7 @@ if figure_name in MAKE_FIGURES or True:
 
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
-    zlabel = "ast_tau_single"
+    zlabel = "ast_p50"
 
     # Restrict sensibly.
     mask = (velociraptor["absolute_rp_mag"] > -16) \
@@ -664,7 +677,7 @@ if figure_name in MAKE_FIGURES:
 
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
-    zlabel = "rv_tau_single"
+    zlabel = "rv_p50"
 
     # Restrict sensibly.
     mask = (velociraptor["absolute_rp_mag"] > -16) \
@@ -707,7 +720,7 @@ if figure_name in MAKE_FIGURES:
 
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
-    zlabel = "rv_tau_single"
+    zlabel = "rv_p50"
 
     if subsample is not None:
         idx = np.random.choice(len(velociraptor), subsample, replace=False)
@@ -788,11 +801,7 @@ if figure_name in MAKE_FIGURES:
     sort, reverse = (True, False)
     vl_sb9_subset = velociraptor[vl_sb9_ids]
 
-    K_est, K_est_err = estimate_K(vl_sb9_subset["rv_single_epoch_scatter"],
-                                  vl_sb9_subset["rv_mu_single"],
-                                  vl_sb9_subset["rv_sigma_single"],
-                                  vl_sb9_subset["rv_mu_single_var"],
-                                  vl_sb9_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_sb9_subset)
 
 
     scalar = (1.0 / (sb9["Per"] * (1 - sb9["e"]**2)**0.5))[sb9_ids]
@@ -851,11 +860,7 @@ if figure_name in MAKE_FIGURES:
     sort, reverse = (True, False)
     vl_sb9_subset = velociraptor[vl_sb9_ids]
 
-    K_est, K_est_err = estimate_K(vl_sb9_subset["rv_single_epoch_scatter"],
-                                  vl_sb9_subset["rv_mu_single"],
-                                  vl_sb9_subset["rv_sigma_single"],
-                                  vl_sb9_subset["rv_mu_single_var"],
-                                  vl_sb9_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_sb9_subset)
 
 
     scalar = (1.0 / (sb9["Per"] * (1 - sb9["e"]**2)**0.5))[sb9_ids]
@@ -864,7 +869,7 @@ if figure_name in MAKE_FIGURES:
     y = K_est * scalar
     xerr = sb9["e_K1"][sb9_ids] * scalar
     yerr = K_est_err * scalar
-    c = vl_sb9_subset["rv_tau_single"]
+    c = vl_sb9_subset["rv_p50"]
 
     if sort:
         idx = np.argsort(c)
@@ -914,11 +919,15 @@ if figure_name in MAKE_FIGURES:
     sort, reverse = (True, False)
     vl_sb9_subset = velociraptor[vl_sb9_ids]
 
+    """
     K_est, K_est_err = estimate_K(vl_sb9_subset["rv_single_epoch_scatter"],
                                   vl_sb9_subset["rv_mu_single"],
                                   vl_sb9_subset["rv_sigma_single"],
                                   vl_sb9_subset["rv_mu_single_var"],
                                   vl_sb9_subset["rv_sigma_single_var"])
+    """
+    K_est, K_est_err = estimate_K(vl_sb9_subset)
+
 
     x = sb9["K1"][sb9_ids]
     y = K_est
@@ -977,11 +986,7 @@ if figure_name in MAKE_FIGURES:
     sort, reverse = (True, False)
     vl_sb9_subset = velociraptor[vl_sb9_ids]
 
-    K_est, K_est_err = estimate_K(vl_sb9_subset["rv_single_epoch_scatter"],
-                                  vl_sb9_subset["rv_mu_single"],
-                                  vl_sb9_subset["rv_sigma_single"],
-                                  vl_sb9_subset["rv_mu_single_var"],
-                                  vl_sb9_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_sb9_subset)
 
 
     scalar = (1.0 / (sb9["Per"] * (1 - sb9["e"]**2)**0.5))[sb9_ids]
@@ -1040,7 +1045,7 @@ if figure_name in MAKE_FIGURES:
 
     x = sb9["K1"][sb9_ids]
     y = sb9["Per"][sb9_ids]
-    c = velociraptor["rv_tau_single"][vl_sb9_ids]
+    c = velociraptor["rv_p50"][vl_sb9_ids]
 
     if sort:
         idx = np.argsort(c)
@@ -1099,17 +1104,13 @@ if figure_name in MAKE_FIGURES:
 
     vl_apwu_subset = velociraptor[vl_apw_um_ids]
 
-    K_est, K_est_err = estimate_K(vl_apwu_subset["rv_single_epoch_scatter"],
-                                  vl_apwu_subset["rv_mu_single"],
-                                  vl_apwu_subset["rv_sigma_single"],
-                                  vl_apwu_subset["rv_mu_single_var"],
-                                  vl_apwu_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_apwu_subset)
 
     x = apw_unimodal["K"][apw_um_ids]
     xerr = apw_unimodal["K_err"][apw_um_ids]
     y = K_est
     yerr = K_est_err
-    c = vl_apwu_subset["rv_tau_single"]
+    c = vl_apwu_subset["rv_p50"]
 
     if sort:
         idx = np.argsort(c)
@@ -1157,11 +1158,7 @@ if figure_name in MAKE_FIGURES:
 
     vl_apwu_subset = velociraptor[vl_apw_um_ids]
 
-    K_est, K_est_err = estimate_K(vl_apwu_subset["rv_single_epoch_scatter"],
-                                  vl_apwu_subset["rv_mu_single"],
-                                  vl_apwu_subset["rv_sigma_single"],
-                                  vl_apwu_subset["rv_mu_single_var"],
-                                  vl_apwu_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_apwu_subset)
 
     scalar = 1.0/(apw_unimodal["P"] * np.sqrt(1 - apw_unimodal["e"]**2))[apw_um_ids]
 
@@ -1169,7 +1166,7 @@ if figure_name in MAKE_FIGURES:
     xerr = apw_unimodal["K_err"][apw_um_ids] * scalar
     y = K_est * scalar
     yerr = K_est_err * scalar
-    c = vl_apwu_subset["rv_tau_single"]
+    c = vl_apwu_subset["rv_p50"]
 
     if sort:
         idx = np.argsort(c)
@@ -1234,17 +1231,8 @@ if figure_name in MAKE_FIGURES:
 
     vl_apwp_subset = velociraptor[vl_apw_lnk_ids]
 
-    K_est, K_est_err = estimate_K(vl_apwp_subset["rv_single_epoch_scatter"],
-                                  vl_apwp_subset["rv_mu_single"],
-                                  vl_apwp_subset["rv_sigma_single"],
-                                  vl_apwp_subset["rv_mu_single_var"],
-                                  vl_apwp_subset["rv_sigma_single_var"])
-
-    x = np.exp(apw_percentiles["lnK_per_1"][apw_lnk_ids])
-    y = K_est
-    yerr = K_est_err
-    c = vl_apwp_subset["rv_tau_single"]
-
+    K_est, K_est_err = estimate_K(vl_apwp_subset)
+  
     if sort:
         idx = np.argsort(c)
         idx = idx[::-1] if reverse else idx
@@ -1287,7 +1275,7 @@ if figure_name in MAKE_FIGURES:
     
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
-    zlabels = ("rv_mu_single", "rv_sigma_single",)
+    zlabels = ("rv_gp_mu_s", "rv_gp_sigma_s",)
     #           "rv_mu_multiple", "rv_sigma_multiple")
 
     K, M = (2, len(zlabels))
@@ -1343,7 +1331,8 @@ if figure_name in MAKE_FIGURES:
                "phot_rp_mean_mag",
                "absolute_rp_mag")
 
-    ylabels = ("rv_mu_single", "rv_sigma_single")
+    #ylabels = ("rv_mu_single", "rv_sigma_single")
+    ylabels = ("rv_gp_mu_s", "rv_gp_sigma_s")
     
     K, M = (len(xlabels), len(ylabels))
     fig, axes = plt.subplots(M, K, figsize=(4 * K, 4 * M))
@@ -1392,6 +1381,7 @@ if figure_name in MAKE_FIGURES:
     xlabel = "bp_rp"
     ylabel = "phot_rp_mean_mag"
     zlabels = ("ast_mu_single", "ast_sigma_single",)
+    zlabels = ("ast_gp_mu_s", "ast_gp_sigma_s")
     #           "ast_mu_multiple", "ast_sigma_multiple")
 
     K, M = (2, len(zlabels))
@@ -1449,7 +1439,8 @@ if figure_name in MAKE_FIGURES:
                "absolute_rp_mag")
 
     ylabels = ("ast_mu_single", "ast_sigma_single")
-    
+    ylabels = ("ast_gp_mu_s", "ast_gp_sigma_s")
+
     K, M = (len(xlabels), len(ylabels))
     fig, axes = plt.subplots(M, K, figsize=(4 * K, 4 * M))
 
@@ -1510,16 +1501,9 @@ if any(["soubiran" in figure_name.lower() for figure_name in MAKE_FIGURES]):
 figure_name = "rv_soubiran_hist"
 if figure_name in MAKE_FIGURES:
 
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
     vl_soubiran_subset = velociraptor[vl_soubiran_ids]
-    K_est, K_est_err = estimate_K(vl_soubiran_subset["rv_single_epoch_scatter"],
-                                  vl_soubiran_subset["rv_mu_single"],
-                                  vl_soubiran_subset["rv_sigma_single"],
-                                  vl_soubiran_subset["rv_mu_single_var"],
-                                  vl_soubiran_subset["rv_sigma_single_var"])
-
-
-    fig, axes = plt.subplots(2, 1, figsize=(4, 8))
-
+    K_est, K_est_err = estimate_K(vl_soubiran_subset)
     axes[0].hist(K_est[np.isfinite(K_est)], bins=100)
 
     axes[0].set_xlabel(r"$K_{est}$ \textrm{/ km\,s}$^{-1}$")
@@ -1529,12 +1513,12 @@ if figure_name in MAKE_FIGURES:
     positive = K_est > 0
     
     axes[1].scatter(K_est[positive],
-                    vl_soubiran_subset["rv_tau_single"][positive], 
+                    vl_soubiran_subset["rv_p50"][positive], 
                     s=10, rasterized=True)
     
     xlim = axes[1].get_xlim()
     axes[1].errorbar(K_est[positive], 
-                     vl_soubiran_subset["rv_tau_single"][positive],
+                     vl_soubiran_subset["rv_p50"][positive],
                      xerr=np.min([K_est_err[positive], K_est[positive] - 1e-4], axis=0),
                      fmt="none", ecolor="#CCCCCC", zorder=-1, 
                      linewidth=1, capsize=0, rasterized=True)
@@ -1548,7 +1532,7 @@ if figure_name in MAKE_FIGURES:
 
     fig.tight_layout()
 
-    notable = (vl_soubiran_subset["rv_tau_single"] < 0.6) \
+    notable = (vl_soubiran_subset["rv_p50"] < 0.6) \
             * (K_est > 0)
 
     savefig(fig, figure_name)
@@ -1573,27 +1557,24 @@ if any(["huang" in figure_name.lower() for figure_name in MAKE_FIGURES]):
 
 
 figure_name = "rv_huang_hist"
+"""
 if figure_name in MAKE_FIGURES:
 
     vl_huang_subset = velociraptor[vl_huang_ids]
-    K_est, K_est_err = estimate_K(vl_huang_subset["rv_single_epoch_scatter"],
-                                  vl_huang_subset["rv_mu_single"],
-                                  vl_huang_subset["rv_sigma_single"],
-                                  vl_huang_subset["rv_mu_single_var"],
-                                  vl_huang_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_huang_subset)
 
 
     fig, axes = plt.subplots(2, 1, figsize=(4, 8))
 
-    v = log_K_significance[vl_huang_ids]
-    sb9_v = log_K_significance[vl_sb9_ids]
-    axes[0].hist(v[np.isfinite(v)], bins=100, normed=True, alpha=0.5)
-    axes[0].hist(sb9_v[np.isfinite(sb9_v)], bins=100, facecolor="tab:green", alpha=0.5, normed=True)
-    axes[0].set_xlabel(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
+    #v = log_K_significance[vl_huang_ids]
+    #sb9_v = log_K_significance[vl_sb9_ids]
+    #axes[0].hist(v[np.isfinite(v)], bins=100, normed=True, alpha=0.5)
+    #axes[0].hist(sb9_v[np.isfinite(sb9_v)], bins=100, facecolor="tab:green", alpha=0.5, normed=True)
+    #axes[0].set_xlabel(r"$\log_{10}\left[\sigma(\textrm{V}_\textrm{R}^{t}) - \mu_s\right] - \log_{10}{\sigma_s}$")
 
-    axes[0].set_yticks([])
+    #axes[0].set_yticks([])
 
-    axes[1].scatter(v, K_est, s=10, rasterized=True)
+    axes[1].scatter(vl, K_est, s=10, rasterized=True)
     
     axes[1].errorbar(v, K_est,
                      yerr=np.min([K_est_err, K_est - 1e-4], axis=0),
@@ -1608,29 +1589,26 @@ if figure_name in MAKE_FIGURES:
 
     fig.tight_layout()
 
-    notable = (vl_huang_subset["rv_tau_single"] < 0.6) \
+    notable = (vl_huang_subset["rv_p50"] < 0.6) \
             * (K_est > 0)
 
     savefig(fig, figure_name)
 
+"""
 
 
 figure_name = "rv_huang_hist2"
 if figure_name in MAKE_FIGURES:
 
     vl_huang_subset = velociraptor[vl_huang_ids]
-    K_est, K_est_err = estimate_K(vl_huang_subset["rv_single_epoch_scatter"],
-                                  vl_huang_subset["rv_mu_single"],
-                                  vl_huang_subset["rv_sigma_single"],
-                                  vl_huang_subset["rv_mu_single_var"],
-                                  vl_huang_subset["rv_sigma_single_var"])
+    K_est, K_est_err = estimate_K(vl_huang_subset)
 
 
     fig, axes = plt.subplots(2, 1, figsize=(4, 8))
 
-    v = vl_huang_subset["rv_tau_single"]
+    v = vl_huang_subset["rv_p50"]
     axes[0].hist(v[np.isfinite(v)], bins=100, normed=True, alpha=0.5)
-    axes[0].set_xlabel(latex_labels["rv_tau_single"])
+    axes[0].set_xlabel(latex_labels["rv_p50"])
 
     axes[0].set_yticks([])
 
@@ -1649,7 +1627,7 @@ if figure_name in MAKE_FIGURES:
 
     fig.tight_layout()
 
-    notable = (vl_huang_subset["rv_tau_single"] < 0.6) \
+    notable = (vl_huang_subset["rv_p50"] < 0.6) \
             * (K_est > 0)
 
     savefig(fig, figure_name)

@@ -111,7 +111,10 @@ def plot_binned_statistic(x, y, z, bins=100, function=np.nanmedian,
         idx = np.where(finite)[0]
         if subsample < 1:
             subsample *= idx.size
-        finite = np.random.choice(idx, int(subsample), replace=False)
+        if int(subsample) > idx.size:
+            finite = idx
+        else:
+            finite = np.random.choice(idx, int(subsample), replace=False)
     
     H, xedges, yedges, binnumber = binned_statistic_2d(
         x[finite], y[finite], z[finite],
